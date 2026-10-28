@@ -53,17 +53,14 @@ class _AppShellState extends State<AppShell> {
       titleSpacing: 16,
       title: Row(
         children: <Widget>[
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: colors.accentSoft,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              Icons.live_tv_rounded,
-              size: 20,
-              color: colors.accent,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(9),
+            child: Image.asset(
+              'assets/branding/mojac_icon.png',
+              width: 34,
+              height: 34,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.medium,
             ),
           ),
           const SizedBox(width: 10),

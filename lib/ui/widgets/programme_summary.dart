@@ -54,7 +54,7 @@ class ProgrammeSummary extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        if (current != null)
+        if (current != null) ...<Widget>[
           Row(
             children: <Widget>[
               Text(strings.now, style: labelStyle),
@@ -79,6 +79,20 @@ class ProgrammeSummary extends StatelessWidget {
               ],
             ],
           ),
+          if (current.subTitle != null)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(top: 1),
+              child: BidiText(
+                current.subTitle!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: style?.copyWith(
+                  color: colors.subtext0,
+                  height: 1.3,
+                ),
+              ),
+            ),
+        ],
         if (!dense && next != null) ...<Widget>[
           const SizedBox(height: 2),
           Row(

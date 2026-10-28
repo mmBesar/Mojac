@@ -89,6 +89,93 @@ if [[ ! -f "$DESKTOP" ]]; then
   exit 1
 fi
 
+# Libraries that must come from the host: glibc, graphics drivers, display
+# servers and the desktop toolkit. Everything else (notably libmpv and its
+# FFmpeg/libass closure) is shipped with the app so the AppImage runs on
+# systems without mpv installed.
+should_skip_lib() {
+  case "$1" in
+    ld-linux*|libc.so.*|libm.so.*|libdl.so.*|libpthread.so.*|librt.so.*|libresolv.so.*|libutil.so.*|libgcc_s.so.*|libstdc++.so.*|libnss_*.so.*)
+      return 0 ;;
+    libGL.so.*|libGLX.so.*|libGLdispatch.so.*|libOpenGL.so.*|libEGL.so.*|libgbm.so.*|libdrm.so.*|libvulkan.so.*|libnvidia-*.so.*)
+      return 0 ;;
+    libX11.so.*|libxcb*.so.*|libXau.so.*|libXdmcp.so.*|libXext.so.*|libXrender.so.*|libXfixes.so.*|libXi.so.*|libXrandr.so.*|libwayland*.so.*|libxkbcommon*.so.*)
+      return 0 ;;
+    libgtk-3.so.*|libgdk-3.so.*|libgdk_pixbuf*.so.*|libglib-2.0.so.*|libgobject-2.0.so.*|libgio-2.0.so.*|libgmodule-2.0.so.*|libgthread-2.0.so.*|libpango*.so.*|libcairo*.so.*|libharfbuzz.so.*|libfontconfig.so.*|libfreetype.so.*)
+      return 0 ;;
+    libasound.so.*|libpulse*.so.*|libpipewire*.so.*|libdbus-1.so.*|libsystemd.so.*)
+      return 0 ;;
+  esac
+  return 1
+}
+
+bundle_runtime_libraries() {
+  local libdir="$BUNDLE/lib"
+  mkdir -p "$libdir"
+
+  local mpv=""
+  local candidate
+  for candidate in "$libdir/libmpv.so.2" "$libdir/libmpv.so"; do
+    if [[ -e "$candidate" ]]; then
+      mpv="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$mpv" ]] && command -v ldconfig >/dev/null 2>&1; then
+    mpv="$(ldconfig -p 2>/dev/null | awk '/libmpv\.so\.2 /{print $NF; exit}')"
+  fi
+  if [[ -z "$mpv" ]]; then
+    for candidate in /usr/lib/*/libmpv.so.2 /usr/lib/libmpv.so.2 \
+      /usr/local/lib/libmpv.so.2; do
+      if [[ -e "$candidate" ]]; then
+        mpv="$candidate"
+        break
+      fi
+    done
+  fi
+  if [[ -z "$mpv" || ! -e "$mpv" ]]; then
+    echo "warning: libmpv.so.2 was not found; the AppImage will need the host mpv" >&2
+    return 0
+  fi
+
+  if [[ "$mpv" != "$libdir/libmpv.so.2" ]]; then
+    cp -L "$mpv" "$libdir/libmpv.so.2"
+  fi
+  ln -sfn libmpv.so.2 "$libdir/libmpv.so"
+
+  # Walk the shared-library graph so libmpv's own dependencies travel with it.
+  declare -A seen=()
+  local queue=("$libdir/libmpv.so.2")
+  local index=0
+  local current dep name copied=0
+  while ((index < ${#queue[@]})); do
+    current="${queue[$index]}"
+    index=$((index + 1))
+    if [[ -n "${seen[$current]:-}" ]]; then
+      continue
+    fi
+    seen[$current]=1
+    while IFS= read -r dep; do
+      if [[ -z "$dep" || ! -e "$dep" ]]; then
+        continue
+      fi
+      name="$(basename "$dep")"
+      if should_skip_lib "$name"; then
+        continue
+      fi
+      if [[ ! -e "$libdir/$name" ]]; then
+        cp -L "$dep" "$libdir/$name"
+        copied=$((copied + 1))
+      fi
+      queue+=("$libdir/$name")
+    done < <(ldd "$current" 2>/dev/null | awk '/=> \//{print $3} /^\//{print $1}')
+  done
+
+  echo "Bundled libmpv and $copied runtime libraries into $libdir."
+}
+
+bundle_runtime_libraries
+
 WORK="$ROOT/build/package/$DEB_ARCH"
 ROOTFS="$WORK/rootfs"
 rm -rf "$WORK"

@@ -12,11 +12,13 @@ import '../player_page.dart';
 import '../widgets/channel_logo.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/error_banner.dart';
+import '../widgets/programme_poster.dart';
 import '../widgets/programme_sheet.dart';
 import '../widgets/warnings_panel.dart';
+import 'channel_guide_page.dart';
 
 const double _channelWidth = 164;
-const double _rowHeight = 82;
+const double _rowHeight = 104;
 const double _headerHeight = 54;
 const double _pixelsPerMinute = 4;
 const int _windowMinutes = 12 * 60;
@@ -38,19 +40,37 @@ class _GuidePageState extends State<GuidePage> {
 
   late DateTime _windowStart;
 
+  /// Horizontal viewport in timeline pixels. Programme posters are only
+  /// requested for blocks near the visible window, so a 12-hour grid does not
+  /// fire hundreds of image downloads for rows the user cannot see.
+  double _visibleStart = 0;
+  double _visibleEnd = 900;
+
+  /// Vertical viewport in row pixels; posters are limited to visible rows too.
+  double _rowStart = 0;
+  double _rowEnd = 900;
+
   @override
   void initState() {
     super.initState();
     _windowStart = _floorToHalfHour(DateTime.now())
         .subtract(const Duration(minutes: 30));
-    _bodyHorizontal.addListener(_syncHeader);
+    _bodyHorizontal
+      ..addListener(_syncHeader)
+      ..addListener(_syncViewport);
+    _vertical.addListener(_syncViewport);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncViewport(force: true);
+    });
   }
 
   @override
   void dispose() {
     _bodyHorizontal
       ..removeListener(_syncHeader)
+      ..removeListener(_syncViewport)
       ..dispose();
+    _vertical.removeListener(_syncViewport);
     _headerHorizontal.dispose();
     _vertical.dispose();
     super.dispose();
@@ -69,6 +89,43 @@ class _GuidePageState extends State<GuidePage> {
     if ((_headerHorizontal.offset - target).abs() > 0.5) {
       _headerHorizontal.jumpTo(target);
     }
+  }
+
+  void _syncViewport({bool force = false}) {
+    final horizontal = _bodyHorizontal.hasClients;
+    final vertical = _vertical.hasClients;
+    if (!horizontal && !vertical) {
+      return;
+    }
+
+    var hStart = _visibleStart;
+    var hEnd = _visibleEnd;
+    var vStart = _rowStart;
+    var vEnd = _rowEnd;
+    if (horizontal) {
+      final position = _bodyHorizontal.position;
+      hStart = position.pixels;
+      hEnd = hStart + position.viewportDimension;
+    }
+    if (vertical) {
+      final position = _vertical.position;
+      vStart = position.pixels;
+      vEnd = vStart + position.viewportDimension;
+    }
+
+    if (!force &&
+        (hStart - _visibleStart).abs() < 600 &&
+        (hEnd - _visibleEnd).abs() < 600 &&
+        (vStart - _rowStart).abs() < 600 &&
+        (vEnd - _rowEnd).abs() < 600) {
+      return;
+    }
+    setState(() {
+      _visibleStart = hStart;
+      _visibleEnd = hEnd;
+      _rowStart = vStart;
+      _rowEnd = vEnd;
+    });
   }
 
   void _jumpToNow() {
@@ -95,6 +152,14 @@ class _GuidePageState extends State<GuidePage> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => PlayerPage(channel: channel),
+      ),
+    );
+  }
+
+  void _openGuide(Channel channel) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => ChannelGuidePage(channel: channel),
       ),
     );
   }
@@ -279,7 +344,8 @@ class _GuidePageState extends State<GuidePage> {
                               _ChannelCell(
                                 channel: channel,
                                 allowInsecure: allowInsecure,
-                                onTap: () => _openPlayer(channel),
+                                onPlay: () => _openPlayer(channel),
+                                onGuide: () => _openGuide(channel),
                               ),
                           ],
                         ),
@@ -322,6 +388,13 @@ class _GuidePageState extends State<GuidePage> {
                                               state.settings.use24HourTime,
                                           allowInsecure: allowInsecure,
                                           even: index.isEven,
+                                          rowVisible:
+                                              index * _rowHeight >=
+                                                  _rowStart - _rowHeight * 2 &&
+                                              index * _rowHeight <=
+                                                  _rowEnd + _rowHeight * 2,
+                                          visibleStart: _visibleStart - 600,
+                                          visibleEnd: _visibleEnd + 600,
                                           onWatch: () => _openPlayer(
                                             channels[index],
                                           ),
@@ -492,16 +565,20 @@ class _ChannelCell extends StatelessWidget {
   const _ChannelCell({
     required this.channel,
     required this.allowInsecure,
-    required this.onTap,
+    required this.onPlay,
+    required this.onGuide,
   });
 
   final Channel channel;
   final bool allowInsecure;
-  final VoidCallback onTap;
+  final VoidCallback onPlay;
+  final VoidCallback onGuide;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.mojacColors;
+    final strings = context.strings;
+    final rtl = Directionality.of(context) == TextDirection.rtl;
     return Container(
       height: _rowHeight,
       decoration: BoxDecoration(
@@ -511,29 +588,53 @@ class _ChannelCell extends StatelessWidget {
           end: BorderSide(color: colors.surface1),
         ),
       ),
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            children: <Widget>[
-              ChannelLogo(
-                channel: channel,
-                allowInsecure: allowInsecure,
-                size: 38,
-                radius: 9,
+      child: Row(
+        children: <Widget>[
+          Tooltip(
+            message: strings.watchLive,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: onPlay,
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: ChannelLogo(
+                  channel: channel,
+                  allowInsecure: allowInsecure,
+                  size: 40,
+                  radius: 9,
+                ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
+            ),
+          ),
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: onGuide,
+              child: Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(2, 6, 6, 6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Text(
-                      channel.displayNumber,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: colors.overlay0,
-                          ),
+                    Row(
+                      children: <Widget>[
+                        Text(
+                          channel.displayNumber,
+                          style:
+                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: colors.overlay0,
+                                  ),
+                        ),
+                        const SizedBox(width: 3),
+                        Icon(
+                          rtl
+                              ? Icons.chevron_left_rounded
+                              : Icons.chevron_right_rounded,
+                          size: 14,
+                          color: colors.overlay0,
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 2),
                     BidiText(
@@ -549,9 +650,9 @@ class _ChannelCell extends StatelessWidget {
                   ],
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -567,6 +668,9 @@ class _GuideRow extends StatelessWidget {
     required this.use24HourTime,
     required this.allowInsecure,
     required this.even,
+    required this.rowVisible,
+    required this.visibleStart,
+    required this.visibleEnd,
     required this.onWatch,
   });
 
@@ -578,6 +682,9 @@ class _GuideRow extends StatelessWidget {
   final bool use24HourTime;
   final bool allowInsecure;
   final bool even;
+  final bool rowVisible;
+  final double visibleStart;
+  final double visibleEnd;
   final VoidCallback onWatch;
 
   @override
@@ -634,6 +741,9 @@ class _GuideRow extends StatelessWidget {
       return const SizedBox.shrink();
     }
     final live = programme.isLiveAt(now);
+    final nearViewport = rowVisible &&
+        left + width >= visibleStart &&
+        left <= visibleEnd;
     return Positioned(
       left: left,
       top: 5,
@@ -642,6 +752,8 @@ class _GuideRow extends StatelessWidget {
       child: _ProgrammeBlock(
         programme: programme,
         live: live,
+        allowInsecure: allowInsecure,
+        showPoster: nearViewport,
         use24HourTime: use24HourTime,
         onTap: () => showProgrammeSheet(
           context,
@@ -659,12 +771,16 @@ class _ProgrammeBlock extends StatelessWidget {
   const _ProgrammeBlock({
     required this.programme,
     required this.live,
+    required this.allowInsecure,
+    required this.showPoster,
     required this.use24HourTime,
     required this.onTap,
   });
 
   final Programme programme;
   final bool live;
+  final bool allowInsecure;
+  final bool showPoster;
   final bool use24HourTime;
   final VoidCallback onTap;
 
@@ -687,7 +803,7 @@ class _ProgrammeBlock extends StatelessWidget {
             borderRadius: BorderRadius.circular(9),
             border: Border.all(color: border),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
           child: LayoutBuilder(
             builder: (context, constraints) {
               final wide = constraints.maxWidth > 110;
@@ -696,10 +812,14 @@ class _ProgrammeBlock extends StatelessWidget {
               // Large accessibility font sizes would otherwise push the live
               // badge, title, subtitle and time past the fixed row height.
               final detailed = wide && textScale <= 1.2;
+              final withPoster = showPoster &&
+                  detailed &&
+                  constraints.maxWidth > 190 &&
+                  textScale <= 1.15;
 
               final title = BidiText(
                 programme.title,
-                maxLines: wide ? 2 : 1,
+                maxLines: detailed ? 2 : 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: colors.text,
@@ -737,77 +857,94 @@ class _ProgrammeBlock extends StatelessWidget {
                 );
               }
 
-              return ClipRect(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    if (live) ...<Widget>[
-                      Row(
-                        children: <Widget>[
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: colors.accent,
-                              shape: BoxShape.circle,
-                            ),
+              final text = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      if (live) ...<Widget>[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
                           ),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              strings.live,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelSmall
-                                  ?.copyWith(
-                                    color: colors.accent,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 9,
-                                    letterSpacing: 0.5,
-                                  ),
-                            ),
+                          decoration: BoxDecoration(
+                            color: colors.accent,
+                            borderRadius: BorderRadius.circular(999),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                    ],
-                    Flexible(flex: 3, child: title),
-                    if (programme.subTitle != null) ...<Widget>[
-                      const SizedBox(height: 1),
-                      Flexible(
-                        flex: 2,
-                        child: BidiText(
-                          programme.subTitle!,
+                          child: Text(
+                            strings.live,
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color: colors.base,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 8.5,
+                                  height: 1.1,
+                                  letterSpacing: 0.4,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                      ],
+                      Expanded(
+                        child: Text(
+                          strings.formatRange(
+                            programme.start,
+                            programme.stop,
+                            use24HourTime: use24HourTime,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style:
                               Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: colors.subtext0,
-                                    height: 1.2,
+                                    color: colors.overlay0,
+                                    fontSize: 9,
+                                    fontFeatures: const <FontFeature>[
+                                      FontFeature.tabularFigures(),
+                                    ],
                                   ),
                         ),
                       ),
                     ],
-                    const SizedBox(height: 2),
-                    Text(
-                      strings.formatRange(
-                        programme.start,
-                        programme.stop,
-                        use24HourTime: use24HourTime,
-                      ),
+                  ),
+                  const SizedBox(height: 2),
+                  title,
+                  if (programme.subTitle != null) ...<Widget>[
+                    const SizedBox(height: 1),
+                    BidiText(
+                      programme.subTitle!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: colors.overlay0,
-                            fontSize: 9,
-                            fontFeatures: const <FontFeature>[
-                              FontFeature.tabularFigures(),
-                            ],
-                          ),
+                      style:
+                          Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: colors.subtext0,
+                                height: 1.2,
+                              ),
                     ),
+                  ],
+                ],
+              );
+
+              if (!withPoster) {
+                return ClipRect(child: text);
+              }
+
+              return ClipRect(
+                child: Row(
+                  children: <Widget>[
+                    ProgrammePoster(
+                      programme: programme,
+                      allowInsecure: allowInsecure,
+                      width: 54,
+                      height: 74,
+                      radius: 7,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: text),
                   ],
                 ),
               );

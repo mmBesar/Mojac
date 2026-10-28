@@ -229,10 +229,17 @@ class AppStrings {
   String get pause => isArabic ? 'إيقاف مؤقت' : 'Pause';
   String get mute => isArabic ? 'كتم الصوت' : 'Mute';
   String get unmute => isArabic ? 'إلغاء كتم الصوت' : 'Unmute';
+  String get volume => isArabic ? 'مستوى الصوت' : 'Volume';
+  String get brightness => isArabic ? 'السطوع' : 'Brightness';
   String get exitFullScreen => isArabic ? 'إنهاء ملء الشاشة' : 'Exit full screen';
   String get closePlayer => isArabic ? 'إغلاق المشغّل' : 'Close player';
   String get streamUnavailable =>
       isArabic ? 'البث غير متاح' : 'Stream unavailable';
+
+  String get channelGuide => isArabic ? 'دليل القناة' : 'Channel guide';
+  String get watchLive => isArabic ? 'مشاهدة مباشرة' : 'Watch live';
+  String get programmeGuide =>
+      isArabic ? 'جدول البرامج' : 'Programme schedule';
 
   String get programmeDetails => isArabic ? 'تفاصيل البرنامج' : 'Programme details';
   String get noDescription =>

@@ -26,6 +26,7 @@ dependencies:
   # 2.x depends on package:material_ui, which defines a second ColorScheme
   # type that is incompatible with package:flutter/material.dart.
   dynamic_color: ">=1.9.0 <2.0.0"
+  screen_brightness: ^2.1.11
   wakelock_plus: ^1.8.2
 
   # Parsing and small utilities.
@@ -39,6 +40,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/branding/mojac_icon.png
 
   fonts:
     - family: MojacArabic

@@ -12,6 +12,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/error_banner.dart';
 import '../widgets/programme_summary.dart';
 import '../widgets/warnings_panel.dart';
+import 'channel_guide_page.dart';
 
 class ChannelsPage extends StatefulWidget {
   const ChannelsPage({super.key, required this.onAddSource});
@@ -36,6 +37,14 @@ class _ChannelsPageState extends State<ChannelsPage> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => PlayerPage(channel: channel),
+      ),
+    );
+  }
+
+  void _openGuide(Channel channel) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => ChannelGuidePage(channel: channel),
       ),
     );
   }
@@ -176,7 +185,8 @@ class _ChannelsPageState extends State<ChannelsPage> {
                         now: state.now,
                         use24HourTime: state.settings.use24HourTime,
                         allowInsecure: allowInsecure,
-                        onTap: () => _openPlayer(channel),
+                        onPlay: () => _openPlayer(channel),
+                        onGuide: () => _openGuide(channel),
                       );
                     },
                   ),
@@ -257,7 +267,8 @@ class _ChannelTile extends StatelessWidget {
     required this.now,
     required this.use24HourTime,
     required this.allowInsecure,
-    required this.onTap,
+    required this.onPlay,
+    required this.onGuide,
   });
 
   final Channel channel;
@@ -265,50 +276,67 @@ class _ChannelTile extends StatelessWidget {
   final DateTime now;
   final bool use24HourTime;
   final bool allowInsecure;
-  final VoidCallback onTap;
+  final VoidCallback onPlay;
+  final VoidCallback onGuide;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.mojacColors;
     final theme = Theme.of(context);
+    final strings = context.strings;
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
         color: colors.surface0,
         borderRadius: BorderRadius.circular(14),
         clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: <Widget>[
-                ChannelLogo(
-                  channel: channel,
-                  allowInsecure: allowInsecure,
-                  size: 52,
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 38,
-                  child: Text(
-                    channel.displayNumber,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: colors.overlay0,
-                      fontFeatures: const <FontFeature>[
-                        FontFeature.tabularFigures(),
-                      ],
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
+          child: Row(
+            children: <Widget>[
+              // Tapping the logo starts playback; the schedule below opens the
+              // channel's own guide. Keeping the actions on their own targets
+              // avoids the old trailing play button taking up list space.
+              Tooltip(
+                message: strings.watchLive,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: onPlay,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: ChannelLogo(
+                      channel: channel,
+                      allowInsecure: allowInsecure,
+                      size: 52,
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      BidiText(
+              ),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 32,
+                child: Text(
+                  channel.displayNumber,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: colors.overlay0,
+                    fontFeatures: const <FontFeature>[
+                      FontFeature.tabularFigures(),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(start: 6),
+                      child: BidiText(
                         channel.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -317,24 +345,42 @@ class _ChannelTile extends StatelessWidget {
                           color: colors.text,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      ProgrammeSummary(
-                        channel: channel,
-                        epg: epg,
-                        now: now,
-                        use24HourTime: use24HourTime,
+                    ),
+                    const SizedBox(height: 2),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: onGuide,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: ProgrammeSummary(
+                                channel: channel,
+                                epg: epg,
+                                now: now,
+                                use24HourTime: use24HourTime,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              rtl
+                                  ? Icons.chevron_left_rounded
+                                  : Icons.chevron_right_rounded,
+                              size: 18,
+                              color: colors.overlay0,
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Icon(
-                  Icons.play_circle_fill_rounded,
-                  color: colors.accent,
-                  size: 32,
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

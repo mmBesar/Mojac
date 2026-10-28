@@ -7,6 +7,7 @@ import '../../data/app_state.dart';
 import '../../data/models.dart';
 import '../../l10n/strings.dart';
 import 'channel_logo.dart';
+import 'programme_poster.dart';
 
 Future<void> showProgrammeSheet(
   BuildContext context, {
@@ -116,6 +117,17 @@ class _ProgrammeSheet extends StatelessWidget {
                 ],
               ],
             ),
+            if (programme.iconUrl != null &&
+                programme.iconUrl!.trim().isNotEmpty) ...<Widget>[
+              const SizedBox(height: 16),
+              ProgrammePoster(
+                programme: programme,
+                allowInsecure: allowInsecure,
+                width: double.infinity,
+                height: 168,
+                radius: 14,
+              ),
+            ],
             if (programme.subTitle != null) ...<Widget>[
               const SizedBox(height: 10),
               BidiText(

@@ -1,21 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Mojac">
   <defs>
-    <linearGradient id="bg" x1="128" y1="96" x2="896" y2="928" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#24273a"/>
-      <stop offset="1" stop-color="#11111b"/>
-    </linearGradient>
-    <linearGradient id="accent" x1="292" y1="300" x2="744" y2="700" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#f5c2e7"/>
+    <linearGradient id="bg" x1="120" y1="96" x2="904" y2="928" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#89b4fa"/>
       <stop offset="0.52" stop-color="#cba6f7"/>
-      <stop offset="1" stop-color="#89b4fa"/>
+      <stop offset="1" stop-color="#f5c2e7"/>
     </linearGradient>
+    <linearGradient id="mark" x1="232" y1="260" x2="792" y2="740" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e6e9ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#11111b" flood-opacity="0.28"/>
+    </filter>
   </defs>
-  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
-  <circle cx="512" cy="512" r="356" fill="#181825"/>
-  <circle cx="512" cy="512" r="356" fill="none" stroke="#313244" stroke-width="10"/>
-  <rect x="244" y="300" width="536" height="392" rx="86" fill="none" stroke="url(#accent)" stroke-width="52"/>
-  <path d="M446 408c0-20 22-33 39-22l170 104c17 11 17 36 0 47l-170 104c-17 11-39-2-39-22V408z" fill="url(#accent)"/>
-  <path d="M422 770h180" stroke="url(#accent)" stroke-width="38" stroke-linecap="round"/>
-  <circle cx="706" cy="352" r="18" fill="#a6e3a1"/>
+
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+
+  <!-- Standing waves, echoing the "your waves" meaning of Mojac. -->
+  <g fill="none" stroke="#11111b" stroke-linecap="round">
+    <path d="M176 846c112-72 224-72 336 0s224 72 336 0" stroke-width="34" opacity="0.16"/>
+    <path d="M176 918c112-72 224-72 336 0s224 72 336 0" stroke-width="26" opacity="0.1"/>
+  </g>
+
+  <!-- The M is drawn as two soft wave crests. -->
+  <path d="M232 712V424c0-96 104-120 170-36l110 146 110-146c66-84 170-60 170 36v288"
+        fill="none" stroke="url(#mark)" stroke-width="104"
+        stroke-linecap="round" stroke-linejoin="round" filter="url(#shadow)"/>
+
+  <!-- Play badge tucked onto the right leg of the M. -->
+  <circle cx="734" cy="742" r="150" fill="#11111b" filter="url(#shadow)"/>
+  <path d="M692 660c0-16 17-26 31-18l108 66c14 8 14 28 0 36l-108 66c-14 8-31-2-31-18V660z"
+        fill="#f5f7ff"/>
 </svg>

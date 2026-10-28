@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:provider/provider.dart';
+import 'package:screen_brightness/screen_brightness.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../core/bidi.dart';
@@ -30,10 +32,22 @@ class _PlayerPageState extends State<PlayerPage> {
   StreamSubscription<String>? _errorSubscription;
   StreamSubscription<bool>? _playingSubscription;
   StreamSubscription<bool>? _bufferingSubscription;
+  StreamSubscription<double>? _volumeSubscription;
 
   String? _error;
   bool _buffering = false;
   bool _fullscreen = false;
+
+  /// Playback gestures: the left half of the video controls brightness and the
+  /// right half controls volume. Brightness uses the Android application
+  /// brightness API; on Linux an overlay dims the video instead.
+  bool _brightnessSupported = false;
+  double _brightness = 1;
+  double _volume = 100;
+  bool _adjustingBrightness = true;
+  _OsdKind? _osdKind;
+  double _osdValue = 0;
+  Timer? _osdTimer;
 
   @override
   void initState() {
@@ -42,6 +56,7 @@ class _PlayerPageState extends State<PlayerPage> {
       configuration: PlayerConfiguration(title: 'Mojac — ${widget.channel.name}'),
     );
     _controller = VideoController(_player);
+    _volume = _player.state.volume;
 
     _errorSubscription = _player.stream.error.listen((message) {
       if (!mounted || message.trim().isEmpty) {
@@ -59,13 +74,85 @@ class _PlayerPageState extends State<PlayerPage> {
         setState(() => _buffering = buffering);
       }
     });
+    _volumeSubscription = _player.stream.volume.listen((volume) {
+      _volume = volume;
+    });
 
     unawaited(
       WakelockPlus.enable().catchError((Object error) {
         debugPrint('Could not enable the wakelock: $error');
       }),
     );
+    unawaited(_initializeBrightness());
     unawaited(_open());
+  }
+
+  Future<void> _initializeBrightness() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+    try {
+      final current = await ScreenBrightness().application;
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _brightnessSupported = true;
+        if (current > 0) {
+          _brightness = current.clamp(0.05, 1.0).toDouble();
+        }
+      });
+    } catch (error) {
+      debugPrint('Application brightness is unavailable: $error');
+    }
+  }
+
+  Future<void> _applyBrightness(double value) async {
+    if (!_brightnessSupported) {
+      return;
+    }
+    try {
+      await ScreenBrightness().setApplicationScreenBrightness(value);
+    } catch (error) {
+      debugPrint('Could not change application brightness: $error');
+    }
+  }
+
+  void _startGesture(Offset position, double width) {
+    _adjustingBrightness = position.dx < width / 2;
+    _showOsd(
+      _adjustingBrightness ? _OsdKind.brightness : _OsdKind.volume,
+      _adjustingBrightness ? _brightness : _volume / 100,
+    );
+  }
+
+  void _updateGesture(DragUpdateDetails details, double height) {
+    final delta = -(details.primaryDelta ?? 0) / (height * 0.55);
+    if (_adjustingBrightness) {
+      final next = (_brightness + delta).clamp(0.05, 1.0).toDouble();
+      setState(() => _brightness = next);
+      unawaited(_applyBrightness(next));
+      _showOsd(_OsdKind.brightness, next);
+    } else {
+      final next = (_volume + delta * 100).clamp(0.0, 100.0).toDouble();
+      setState(() => _volume = next);
+      unawaited(_player.setVolume(next));
+      _showOsd(_OsdKind.volume, next / 100);
+    }
+  }
+
+  void _showOsd(_OsdKind kind, double value) {
+    _osdTimer?.cancel();
+    setState(() {
+      _osdKind = kind;
+      _osdValue = value.clamp(0.0, 1.0).toDouble();
+    });
+    _osdTimer = Timer(const Duration(milliseconds: 900), () {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _osdKind = null);
+    });
   }
 
   Future<void> _setMpvProperty(String name, String value) async {
@@ -113,6 +200,7 @@ class _PlayerPageState extends State<PlayerPage> {
     final next = !_fullscreen;
     setState(() => _fullscreen = next);
     await _setSystemUi(immersive: next);
+    await _setOrientation(landscape: next);
   }
 
   Future<void> _setSystemUi({required bool immersive}) async {
@@ -125,11 +213,37 @@ class _PlayerPageState extends State<PlayerPage> {
     }
   }
 
+  Future<void> _setOrientation({required bool landscape}) async {
+    try {
+      await SystemChrome.setPreferredOrientations(
+        landscape
+            ? const <DeviceOrientation>[
+                DeviceOrientation.landscapeLeft,
+                DeviceOrientation.landscapeRight,
+              ]
+            : DeviceOrientation.values,
+      );
+    } catch (_) {
+      // Desktop platforms do not rotate.
+    }
+  }
+
   @override
   void dispose() {
+    _osdTimer?.cancel();
     _errorSubscription?.cancel();
     _playingSubscription?.cancel();
     _bufferingSubscription?.cancel();
+    _volumeSubscription?.cancel();
+    if (_brightnessSupported) {
+      unawaited(
+        ScreenBrightness()
+            .resetApplicationScreenBrightness()
+            .catchError((Object error) {
+          debugPrint('Could not reset application brightness: $error');
+        }),
+      );
+    }
     unawaited(
       WakelockPlus.disable().catchError((Object error) {
         debugPrint('Could not disable the wakelock: $error');
@@ -137,6 +251,7 @@ class _PlayerPageState extends State<PlayerPage> {
     );
     unawaited(_player.dispose());
     unawaited(_setSystemUi(immersive: false));
+    unawaited(_setOrientation(landscape: false));
     super.dispose();
   }
 
@@ -191,7 +306,10 @@ class _PlayerPageState extends State<PlayerPage> {
         bottom: !_fullscreen,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final wide = constraints.maxWidth >= 980;
+            final landscape = constraints.maxWidth > constraints.maxHeight;
+            final wideDesktop = constraints.maxWidth >= 980;
+            final sideBySide = landscape || wideDesktop;
+
             final video = _VideoPane(
               player: _player,
               controller: _controller,
@@ -202,6 +320,16 @@ class _PlayerPageState extends State<PlayerPage> {
               onRetry: _open,
               fullscreen: _fullscreen,
               onToggleFullscreen: _toggleFullscreen,
+              onDragStart: _startGesture,
+              onDragUpdate: _updateGesture,
+              dimOpacity: _brightnessSupported ? 0.0 : (1 - _brightness) * 0.6,
+              osd: _osdKind == null
+                  ? null
+                  : _GestureOsd(
+                      kind: _osdKind!,
+                      value: _osdValue,
+                      strings: strings,
+                    ),
             );
             final info = _ChannelInfo(
               channel: widget.channel,
@@ -226,13 +354,21 @@ class _PlayerPageState extends State<PlayerPage> {
               );
             }
 
-            if (wide) {
+            if (sideBySide) {
+              // Landscape phones get the same side panel as wide desktops, so
+              // the video stays fully visible instead of pushing the channel
+              // information below the fold.
+              final panelWidth = wideDesktop
+                  ? 380.0
+                  : (constraints.maxWidth * 0.4)
+                      .clamp(260.0, 380.0)
+                      .toDouble();
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   Expanded(child: video),
                   Container(
-                    width: 380,
+                    width: panelWidth,
                     decoration: BoxDecoration(
                       color: colors.mantle,
                       border: BorderDirectional(
@@ -275,6 +411,10 @@ class _VideoPane extends StatelessWidget {
     required this.onRetry,
     required this.fullscreen,
     required this.onToggleFullscreen,
+    required this.onDragStart,
+    required this.onDragUpdate,
+    required this.dimOpacity,
+    required this.osd,
   });
 
   final Player player;
@@ -286,6 +426,10 @@ class _VideoPane extends StatelessWidget {
   final VoidCallback onRetry;
   final bool fullscreen;
   final VoidCallback onToggleFullscreen;
+  final void Function(Offset position, double width) onDragStart;
+  final void Function(DragUpdateDetails details, double height) onDragUpdate;
+  final double dimOpacity;
+  final Widget? osd;
 
   @override
   Widget build(BuildContext context) {
@@ -294,17 +438,36 @@ class _VideoPane extends StatelessWidget {
       child: Stack(
         children: <Widget>[
           Positioned.fill(
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Video(
-                  controller: controller,
-                  controls: NoVideoControls,
-                  fit: BoxFit.contain,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onVerticalDragStart: (details) =>
+                      onDragStart(details.localPosition, constraints.maxWidth),
+                  onVerticalDragUpdate: (details) =>
+                      onDragUpdate(details, constraints.maxHeight),
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Video(
+                        controller: controller,
+                        controls: NoVideoControls,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (dimOpacity > 0)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ColoredBox(
+                  color: Colors.black.withValues(alpha: dimOpacity),
                 ),
               ),
             ),
-          ),
           if (buffering)
             const Positioned(
               left: 0,
@@ -422,7 +585,90 @@ class _VideoPane extends StatelessWidget {
                 onPressed: onToggleFullscreen,
               ),
             ),
+          if (osd != null) Positioned.fill(child: osd!),
         ],
+      ),
+    );
+  }
+}
+
+enum _OsdKind { brightness, volume }
+
+class _GestureOsd extends StatelessWidget {
+  const _GestureOsd({
+    required this.kind,
+    required this.value,
+    required this.strings,
+  });
+
+  final _OsdKind kind;
+  final double value;
+  final AppStrings strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = kind == _OsdKind.brightness;
+    final percent = (value * 100).round();
+    return IgnorePointer(
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.68),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(
+                    brightness
+                        ? Icons.brightness_6_rounded
+                        : (percent == 0
+                            ? Icons.volume_off_rounded
+                            : Icons.volume_up_rounded),
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    brightness ? strings.brightness : strings.volume,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: 156,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: value,
+                    minHeight: 5,
+                    backgroundColor: Colors.white.withValues(alpha: 0.22),
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '$percent%',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -76,6 +76,8 @@ class AppStrings {
       ? 'أضف مصدرًا لعرض جدول البرامج.'
       : 'Add a source to see the programme schedule.';
   String get guideNow => isArabic ? 'الآن' : 'Now';
+  String get timelineZoom =>
+      isArabic ? 'تكبير الجدول الزمني' : 'Timeline zoom';
   String get twelveHourWindow =>
       isArabic ? 'نافذة 12 ساعة' : '12-hour window';
 

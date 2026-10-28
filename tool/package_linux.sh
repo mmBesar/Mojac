@@ -99,12 +99,24 @@ should_skip_lib() {
       return 0 ;;
     libGL.so.*|libGLX.so.*|libGLdispatch.so.*|libOpenGL.so.*|libEGL.so.*|libgbm.so.*|libdrm.so.*|libvulkan.so.*|libnvidia-*.so.*)
       return 0 ;;
-    libX11.so.*|libxcb*.so.*|libXau.so.*|libXdmcp.so.*|libXext.so.*|libXrender.so.*|libXfixes.so.*|libXi.so.*|libXrandr.so.*|libwayland*.so.*|libxkbcommon*.so.*)
+    libX11.so.*|libX11-xcb.so.*|libxcb*.so.*|libXau.so.*|libXdmcp.so.*|libXext.so.*|libXrender.so.*|libXfixes.so.*|libXi.so.*|libXrandr.so.*|libXcomposite.so.*|libXdamage.so.*|libXinerama.so.*|libXcursor.so.*|libwayland*.so.*|libxkbcommon*.so.*)
       return 0 ;;
-    libgtk-3.so.*|libgdk-3.so.*|libgdk_pixbuf*.so.*|libglib-2.0.so.*|libgobject-2.0.so.*|libgio-2.0.so.*|libgmodule-2.0.so.*|libgthread-2.0.so.*|libpango*.so.*|libcairo*.so.*|libharfbuzz.so.*|libfontconfig.so.*|libfreetype.so.*)
+    libgtk-3.so.*|libgdk-3.so.*|libgdk_pixbuf*.so.*|libglib-2.0.so.*|libgobject-2.0.so.*|libgio-2.0.so.*|libgmodule-2.0.so.*|libgthread-2.0.so.*|libpango*.so.*|libcairo*.so.*|libharfbuzz.so.*|libfontconfig.so.*|libfreetype.so.*|libatk*.so.*|libatspi*.so.*)
       return 0 ;;
     libasound.so.*|libpulse*.so.*|libpipewire*.so.*|libdbus-1.so.*|libsystemd.so.*)
       return 0 ;;
+    # Core system/glib dependencies. These are provided by every distro and
+    # are also loaded by the host GTK stack, so an older bundled copy shadows
+    # the host one and can break it (libmount's MOUNT_2_40 on NixOS).
+    libmount.so.*|libblkid.so.*|libselinux.so.*|libpcre2-*.so.*|libapparmor.so.*|libexpat.so.*|libgraphite2.so.*|libdatrie.so.*|libthai.so.*|libpixman-1.so.*|libfribidi.so.*|libbrotli*.so.*|libz.so.*|liblzma.so.*|libudev.so.*|libcap.so.*)
+      return 0 ;;
+    # Keep bz2 bundled. Debian/Ubuntu's soname is libbz2.so.1.0 while NixOS
+    # ships libbz2.so.1, so appimage-run's FHS rootfs cannot satisfy
+    # libavformat/libarchive even though it has bzip2 installed. Bundling the
+    # .1.0 name is harmless: host libraries ask for libbz2.so.1 and therefore
+    # still get their own copy.
+    libbz2.so.1.0|libbz2.so.1.0.*)
+      return 1 ;;
   esac
   return 1
 }
@@ -142,10 +154,11 @@ bundle_runtime_libraries() {
     ln -sfn libmpv.so.2 "$libdir/libmpv.so"
   fi
 
-  # Walk the shared-library graph from libmpv *and* the app bundle. The Flutter
-  # engine and its plugins link a handful of libraries directly (libepoxy is
-  # the usual one); without them the AppImage fails in minimal environments
-  # such as NixOS's appimage-run, which provides GTK but not every sibling.
+  # Walk the shared-library graph from libmpv, the app binary and the plugin
+  # libraries already in the bundle. Only *direct* NEEDED entries are followed:
+  # `ldd` prints the whole transitive closure, including libraries used by
+  # host-provided GTK/glib, and shipping the build host's older copies makes
+  # them shadow newer host ones at runtime (NixOS's MOUNT_2_40 failure).
   declare -A seen=()
   local queue=()
   if [[ -e "$libdir/libmpv.so.2" ]]; then
@@ -162,7 +175,7 @@ bundle_runtime_libraries() {
   done
 
   local index=0
-  local current dep name copied=0
+  local current dep name needed_lib copied=0 resolved ldd_output
   while ((index < ${#queue[@]})); do
     current="${queue[$index]}"
     index=$((index + 1))
@@ -170,20 +183,51 @@ bundle_runtime_libraries() {
       continue
     fi
     seen[$current]=1
-    while IFS= read -r dep; do
-      if [[ -z "$dep" || ! -e "$dep" ]]; then
-        continue
-      fi
-      name="$(basename "$dep")"
-      if should_skip_lib "$name"; then
-        continue
-      fi
-      if [[ ! -e "$libdir/$name" ]]; then
-        cp -L "$dep" "$libdir/$name"
-        copied=$((copied + 1))
-      fi
-      queue+=("$libdir/$name")
-    done < <(ldd "$current" 2>/dev/null | awk '/=> \//{print $3} /^\//{print $1}')
+
+    ldd_output="$(LD_LIBRARY_PATH="$libdir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+      ldd "$current" 2>/dev/null || true)"
+
+    if command -v readelf >/dev/null 2>&1; then
+      while IFS= read -r needed_lib; do
+        if [[ -z "$needed_lib" ]]; then
+          continue
+        fi
+        resolved="$(printf '%s\n' "$ldd_output" | awk -v n="$needed_lib" '
+          $1 == n && $2 == "=>" { print $3; exit }
+          $1 == n && $2 != "=>" { print $1; exit }
+        ')"
+        if [[ -z "$resolved" || ! -e "$resolved" ]]; then
+          continue
+        fi
+        name="$(basename "$resolved")"
+        if should_skip_lib "$name"; then
+          continue
+        fi
+        if [[ ! -e "$libdir/$name" ]]; then
+          cp -L "$resolved" "$libdir/$name"
+          copied=$((copied + 1))
+        fi
+        queue+=("$libdir/$name")
+      done < <(readelf -d "$current" 2>/dev/null |
+        awk '/NEEDED/ { gsub(/[\[\]]/, "", $5); print $5 }')
+    else
+      # binutils is normally available; fall back to ldd's full closure.
+      while IFS= read -r resolved; do
+        if [[ -z "$resolved" || ! -e "$resolved" ]]; then
+          continue
+        fi
+        name="$(basename "$resolved")"
+        if should_skip_lib "$name"; then
+          continue
+        fi
+        if [[ ! -e "$libdir/$name" ]]; then
+          cp -L "$resolved" "$libdir/$name"
+          copied=$((copied + 1))
+        fi
+        queue+=("$libdir/$name")
+      done < <(printf '%s\n' "$ldd_output" |
+        awk '/=> \//{print $3} /^\//{print $1}')
+    fi
   done
 
   echo "Bundled $copied runtime libraries into $libdir."

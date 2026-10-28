@@ -17,12 +17,17 @@ import '../widgets/programme_sheet.dart';
 import '../widgets/warnings_panel.dart';
 import 'channel_guide_page.dart';
 
-const double _channelWidth = 164;
-const double _rowHeight = 104;
-const double _headerHeight = 54;
-const double _pixelsPerMinute = 4;
+const double _channelWidth = 126;
+const double _rowHeight = 92;
+const double _headerHeight = 50;
+const double _minPixelsPerMinute = 4;
+const double _maxPixelsPerMinute = 12;
 const int _windowMinutes = 12 * 60;
-const double _timelineWidth = _windowMinutes * _pixelsPerMinute;
+
+/// Rows are built lazily around the vertical viewport. Keeping a few rows of
+/// overscan above and below avoids blank strips during a fast fling without
+/// laying out a whole 5,000-channel playlist on every frame.
+const int _rowOverscan = 8;
 
 class GuidePage extends StatefulWidget {
   const GuidePage({super.key, required this.onAddSource});
@@ -39,6 +44,12 @@ class _GuidePageState extends State<GuidePage> {
   final ScrollController _vertical = ScrollController();
 
   late DateTime _windowStart;
+
+  /// Timeline density. The guide opens at the historical 4 px/minute and can
+  /// zoom in to 12 px/minute for reading long programme titles.
+  double _pixelsPerMinute = _minPixelsPerMinute;
+
+  double get _timelineWidth => _windowMinutes * _pixelsPerMinute;
 
   /// Horizontal viewport in timeline pixels. Programme posters are only
   /// requested for blocks near the visible window, so a 12-hour grid does not
@@ -148,6 +159,35 @@ class _GuidePageState extends State<GuidePage> {
     });
   }
 
+  /// Changes the timeline scale without losing the time the user is looking
+  /// at: the minute under the middle of the viewport stays under the middle.
+  void _setZoom(double value) {
+    final zoom = value.clamp(_minPixelsPerMinute, _maxPixelsPerMinute);
+    if ((zoom - _pixelsPerMinute).abs() < 0.01) {
+      return;
+    }
+    var centreMinute = (DateTime.now().difference(_windowStart).inSeconds / 60)
+        .clamp(0.0, _windowMinutes.toDouble());
+    if (_bodyHorizontal.hasClients) {
+      final position = _bodyHorizontal.position;
+      centreMinute =
+          (position.pixels + position.viewportDimension / 2) /
+              _pixelsPerMinute;
+    }
+    setState(() => _pixelsPerMinute = zoom);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_bodyHorizontal.hasClients) {
+        return;
+      }
+      final position = _bodyHorizontal.position;
+      final target = centreMinute * zoom - position.viewportDimension / 2;
+      _bodyHorizontal.jumpTo(
+        target.clamp(0.0, position.maxScrollExtent),
+      );
+      _syncViewport(force: true);
+    });
+  }
+
   void _openPlayer(Channel channel) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -231,6 +271,20 @@ class _GuidePageState extends State<GuidePage> {
     final nowOffset = now.difference(_windowStart).inSeconds / 60 *
         _pixelsPerMinute;
     final showNow = nowOffset >= 0 && nowOffset <= _timelineWidth;
+    final lastRow = math.min(
+      channels.length - 1,
+      (_rowEnd / _rowHeight).ceil() + _rowOverscan,
+    );
+    // Clamp against lastRow as well: a refresh can replace a long playlist
+    // with a shorter one while the user is scrolled far down, and an
+    // unclamped firstRow would create spacers larger than the content.
+    final firstRow = math.max(
+      0,
+      math.min(
+        lastRow,
+        (_rowStart / _rowHeight).floor() - _rowOverscan,
+      ),
+    );
 
     return Column(
       children: <Widget>[
@@ -257,6 +311,8 @@ class _GuidePageState extends State<GuidePage> {
                         _windowEnd,
                         use24HourTime: state.settings.use24HourTime,
                       )} · ${strings.twelveHourWindow}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: context.mojacColors.subtext0,
                           ),
@@ -264,10 +320,19 @@ class _GuidePageState extends State<GuidePage> {
                   ],
                 ),
               ),
-              TextButton.icon(
+              const SizedBox(width: 8),
+              _TimelineZoom(
+                value: _pixelsPerMinute,
+                min: _minPixelsPerMinute,
+                max: _maxPixelsPerMinute,
+                onChanged: _setZoom,
+              ),
+              const SizedBox(width: 2),
+              IconButton(
+                tooltip: strings.guideNow,
                 onPressed: _jumpToNow,
-                icon: const Icon(Icons.my_location_rounded, size: 18),
-                label: Text(strings.guideNow),
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.my_location_rounded, size: 20),
               ),
             ],
           ),
@@ -320,6 +385,7 @@ class _GuidePageState extends State<GuidePage> {
                             height: _headerHeight,
                             child: _TimeHeader(
                               start: _windowStart,
+                              pixelsPerMinute: _pixelsPerMinute,
                               use24HourTime: state.settings.use24HourTime,
                               nowOffset: showNow ? nowOffset : null,
                             ),
@@ -340,13 +406,20 @@ class _GuidePageState extends State<GuidePage> {
                         width: _channelWidth,
                         child: Column(
                           children: <Widget>[
-                            for (final channel in channels)
+                            SizedBox(height: firstRow * _rowHeight),
+                            for (var index = firstRow;
+                                index <= lastRow;
+                                index++)
                               _ChannelCell(
-                                channel: channel,
+                                channel: channels[index],
                                 allowInsecure: allowInsecure,
-                                onPlay: () => _openPlayer(channel),
-                                onGuide: () => _openGuide(channel),
+                                onPlay: () => _openPlayer(channels[index]),
+                                onGuide: () => _openGuide(channels[index]),
                               ),
+                            SizedBox(
+                              height:
+                                  (channels.length - 1 - lastRow) * _rowHeight,
+                            ),
                           ],
                         ),
                       ),
@@ -365,6 +438,7 @@ class _GuidePageState extends State<GuidePage> {
                                     child: CustomPaint(
                                       painter: _GridPainter(
                                         start: _windowStart,
+                                        pixelsPerMinute: _pixelsPerMinute,
                                         gridColor:
                                             context.mojacColors.surface1,
                                         hourColor:
@@ -375,8 +449,9 @@ class _GuidePageState extends State<GuidePage> {
                                   ),
                                   Column(
                                     children: <Widget>[
-                                      for (var index = 0;
-                                          index < channels.length;
+                                      SizedBox(height: firstRow * _rowHeight),
+                                      for (var index = firstRow;
+                                          index <= lastRow;
                                           index++)
                                         _GuideRow(
                                           channel: channels[index],
@@ -384,21 +459,23 @@ class _GuidePageState extends State<GuidePage> {
                                           windowStart: _windowStart,
                                           windowEnd: _windowEnd,
                                           now: now,
+                                          pixelsPerMinute: _pixelsPerMinute,
                                           use24HourTime:
                                               state.settings.use24HourTime,
                                           allowInsecure: allowInsecure,
                                           even: index.isEven,
-                                          rowVisible:
-                                              index * _rowHeight >=
-                                                  _rowStart - _rowHeight * 2 &&
-                                              index * _rowHeight <=
-                                                  _rowEnd + _rowHeight * 2,
                                           visibleStart: _visibleStart - 600,
                                           visibleEnd: _visibleEnd + 600,
                                           onWatch: () => _openPlayer(
                                             channels[index],
                                           ),
                                         ),
+                                      SizedBox(
+                                        height: (channels.length -
+                                                1 -
+                                                lastRow) *
+                                            _rowHeight,
+                                      ),
                                     ],
                                   ),
                                   if (showNow)
@@ -436,6 +513,59 @@ DateTime _floorToHalfHour(DateTime value) {
   return DateTime(value.year, value.month, value.day, value.hour, minute);
 }
 
+/// Compact density control for the timeline. The guide spans twelve hours, so
+/// the slider trades how much of the schedule is visible against how much room
+/// each programme gets for its title.
+class _TimelineZoom extends StatelessWidget {
+  const _TimelineZoom({
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+  });
+
+  final double value;
+  final double min;
+  final double max;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.mojacColors;
+    final strings = context.strings;
+    return Semantics(
+      label: strings.timelineZoom,
+      child: Tooltip(
+        message: strings.timelineZoom,
+        child: SizedBox(
+          width: 104,
+          height: 32,
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 2,
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+              activeTrackColor: colors.accent,
+              inactiveTrackColor: colors.surface1,
+              thumbColor: colors.accent,
+              overlayColor: colors.accent.withValues(alpha: 0.16),
+            ),
+            child: Slider(
+              value: value,
+              min: min,
+              max: max,
+              divisions: 16,
+              semanticFormatterCallback: (zoom) =>
+                  '${zoom.toStringAsFixed(0)} px/min',
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CornerCell extends StatelessWidget {
   const _CornerCell({required this.child});
 
@@ -463,11 +593,13 @@ class _CornerCell extends StatelessWidget {
 class _TimeHeader extends StatelessWidget {
   const _TimeHeader({
     required this.start,
+    required this.pixelsPerMinute,
     required this.use24HourTime,
     this.nowOffset,
   });
 
   final DateTime start;
+  final double pixelsPerMinute;
   final bool use24HourTime;
   final double? nowOffset;
 
@@ -483,7 +615,7 @@ class _TimeHeader extends StatelessWidget {
       }
       labels.add(
         Positioned(
-          left: minute * _pixelsPerMinute + 6,
+          left: minute * pixelsPerMinute + 6,
           top: 0,
           bottom: 0,
           child: Center(
@@ -534,11 +666,13 @@ class _TimeHeader extends StatelessWidget {
 class _GridPainter extends CustomPainter {
   const _GridPainter({
     required this.start,
+    required this.pixelsPerMinute,
     required this.gridColor,
     required this.hourColor,
   });
 
   final DateTime start;
+  final double pixelsPerMinute;
   final Color gridColor;
   final Color hourColor;
 
@@ -546,7 +680,7 @@ class _GridPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..strokeWidth = 1;
     for (var minute = 0; minute <= _windowMinutes; minute += 30) {
-      final x = minute * _pixelsPerMinute;
+      final x = minute * pixelsPerMinute;
       final isHour = start.add(Duration(minutes: minute)).minute == 0;
       paint.color = isHour ? hourColor : gridColor;
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
@@ -556,6 +690,7 @@ class _GridPainter extends CustomPainter {
   @override
   bool shouldRepaint(_GridPainter oldDelegate) {
     return oldDelegate.start != start ||
+        oldDelegate.pixelsPerMinute != pixelsPerMinute ||
         oldDelegate.gridColor != gridColor ||
         oldDelegate.hourColor != hourColor;
   }
@@ -665,10 +800,10 @@ class _GuideRow extends StatelessWidget {
     required this.windowStart,
     required this.windowEnd,
     required this.now,
+    required this.pixelsPerMinute,
     required this.use24HourTime,
     required this.allowInsecure,
     required this.even,
-    required this.rowVisible,
     required this.visibleStart,
     required this.visibleEnd,
     required this.onWatch,
@@ -679,10 +814,10 @@ class _GuideRow extends StatelessWidget {
   final DateTime windowStart;
   final DateTime windowEnd;
   final DateTime now;
+  final double pixelsPerMinute;
   final bool use24HourTime;
   final bool allowInsecure;
   final bool even;
-  final bool rowVisible;
   final double visibleStart;
   final double visibleEnd;
   final VoidCallback onWatch;
@@ -732,18 +867,22 @@ class _GuideRow extends StatelessWidget {
         programme.stop.isAfter(windowEnd) ? windowEnd : programme.stop;
     final left =
         math.max(0.0, start.difference(windowStart).inSeconds / 60) *
-            _pixelsPerMinute;
+            pixelsPerMinute;
     final width = math.max(
       0.0,
-      stop.difference(start).inSeconds / 60 * _pixelsPerMinute - 2,
+      stop.difference(start).inSeconds / 60 * pixelsPerMinute - 2,
     );
     if (width < 1) {
       return const SizedBox.shrink();
     }
+    // The row is already limited to the vertical viewport; also skip
+    // programmes that are horizontally outside it. At the maximum zoom only a
+    // fraction of the twelve-hour timeline is on screen, so this avoids
+    // building hundreds of hidden blocks per frame.
+    if (left + width < visibleStart || left > visibleEnd) {
+      return const SizedBox.shrink();
+    }
     final live = programme.isLiveAt(now);
-    final nearViewport = rowVisible &&
-        left + width >= visibleStart &&
-        left <= visibleEnd;
     return Positioned(
       left: left,
       top: 5,
@@ -753,7 +892,7 @@ class _GuideRow extends StatelessWidget {
         programme: programme,
         live: live,
         allowInsecure: allowInsecure,
-        showPoster: nearViewport,
+        showPoster: true,
         use24HourTime: use24HourTime,
         onTap: () => showProgrammeSheet(
           context,
@@ -827,8 +966,23 @@ class _ProgrammeBlock extends StatelessWidget {
                       height: 1.2,
                     ),
               );
+              final subtitle = programme.subTitle == null
+                  ? null
+                  : BidiText(
+                      programme.subTitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: colors.subtext0,
+                                height: 1.2,
+                              ),
+                    );
 
               if (!detailed) {
+                // Even the narrowest block carries the sub-title, so short
+                // programmes still show e.g. the episode name.
+                final compactSubtitle = textScale <= 1.8 ? subtitle : null;
                 return Directionality(
                   textDirection: bidiDirectionOf(programme.title),
                   child: Stack(
@@ -836,7 +990,19 @@ class _ProgrammeBlock extends StatelessWidget {
                       Positioned.fill(
                         child: Align(
                           alignment: AlignmentDirectional.centerStart,
-                          child: title,
+                          child: ClipRect(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                title,
+                                if (compactSubtitle != null) ...<Widget>[
+                                  const SizedBox(height: 1),
+                                  compactSubtitle,
+                                ],
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                       if (live)
@@ -913,18 +1079,9 @@ class _ProgrammeBlock extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   title,
-                  if (programme.subTitle != null) ...<Widget>[
+                  if (subtitle != null) ...<Widget>[
                     const SizedBox(height: 1),
-                    BidiText(
-                      programme.subTitle!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style:
-                          Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: colors.subtext0,
-                                height: 1.2,
-                              ),
-                    ),
+                    subtitle,
                   ],
                 ],
               );

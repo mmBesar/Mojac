@@ -22,6 +22,11 @@ class ChannelLogo extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.mojacColors;
     final url = channel.logoUrl;
+    // Decode logos at the size they are actually drawn at. Channel images are
+    // often much larger than the 34-54px tile, and a big source list can
+    // otherwise exhaust the image cache (or Android's memory budget) until
+    // previously loaded logos start failing to decode.
+    final pixels = (size * MediaQuery.devicePixelRatioOf(context)).ceil();
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: Container(
@@ -32,7 +37,12 @@ class ChannelLogo extends StatelessWidget {
         child: url == null || url.isEmpty
             ? _Fallback(size: size, color: colors.subtext0)
             : Image(
-                image: MojacNetworkImage(url, allowInsecure: allowInsecure),
+                image: ResizeImage(
+                  MojacNetworkImage(url, allowInsecure: allowInsecure),
+                  width: pixels,
+                  height: pixels,
+                  policy: ResizeImagePolicy.fit,
+                ),
                 width: size,
                 height: size,
                 fit: BoxFit.contain,

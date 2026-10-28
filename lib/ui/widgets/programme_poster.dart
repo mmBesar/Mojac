@@ -26,6 +26,11 @@ class ProgrammePoster extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.mojacColors;
     final url = programme.iconUrl;
+    // XMLTV artwork is frequently full HD. Decode only what the poster slot
+    // needs so a guide full of programmes cannot blow the image cache.
+    final ratio = MediaQuery.devicePixelRatioOf(context);
+    final cacheWidth = width.isFinite ? (width * ratio).ceil() : 1080;
+    final cacheHeight = (height * ratio).ceil();
     final fallback = _Fallback(
       width: width,
       height: height,
@@ -41,9 +46,14 @@ class ProgrammePoster extends StatelessWidget {
         child: url == null || url.trim().isEmpty
             ? fallback
             : Image(
-                image: MojacNetworkImage(
-                  url.trim(),
-                  allowInsecure: allowInsecure,
+                image: ResizeImage(
+                  MojacNetworkImage(
+                    url.trim(),
+                    allowInsecure: allowInsecure,
+                  ),
+                  width: cacheWidth,
+                  height: cacheHeight,
+                  policy: ResizeImagePolicy.fit,
                 ),
                 width: width,
                 height: height,

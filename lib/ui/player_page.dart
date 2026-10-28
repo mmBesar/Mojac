@@ -891,23 +891,44 @@ class _ChannelInfo extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                BidiText(
-                  strings.formatTime(next.start, use24HourTime: use24),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colors.accent,
-                    fontWeight: FontWeight.w600,
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: BidiText(
+                    strings.formatTime(next.start, use24HourTime: use24),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.accent,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: BidiText(
-                    next.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colors.subtext1,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      BidiText(
+                        next.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colors.subtext1,
+                        ),
+                      ),
+                      if (next.subTitle != null) ...<Widget>[
+                        const SizedBox(height: 2),
+                        BidiText(
+                          next.subTitle!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.overlay0,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],

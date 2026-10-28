@@ -91,11 +91,11 @@ fi
 
 # Libraries that must come from the host: glibc, graphics drivers, display
 # servers and the desktop toolkit. Everything else (notably libmpv and its
-# FFmpeg/libass closure) is shipped with the app so the AppImage runs on
-# systems without mpv installed.
+# FFmpeg/libass closure, plus libraries the Flutter engine links directly) is
+# shipped with the app so the AppImage runs on systems without mpv installed.
 should_skip_lib() {
   case "$1" in
-    ld-linux*|libc.so.*|libm.so.*|libdl.so.*|libpthread.so.*|librt.so.*|libresolv.so.*|libutil.so.*|libgcc_s.so.*|libstdc++.so.*|libnss_*.so.*)
+    ld-linux*|libc.so.*|libm.so.*|libdl.so.*|libpthread.so.*|librt.so.*|libresolv.so.*|libutil.so.*|libgcc_s.so.*|libstdc++.so.*|libnss_*.so.*|libjvm.so*|libjawt.so*)
       return 0 ;;
     libGL.so.*|libGLX.so.*|libGLdispatch.so.*|libOpenGL.so.*|libEGL.so.*|libgbm.so.*|libdrm.so.*|libvulkan.so.*|libnvidia-*.so.*)
       return 0 ;;
@@ -135,17 +135,32 @@ bundle_runtime_libraries() {
   fi
   if [[ -z "$mpv" || ! -e "$mpv" ]]; then
     echo "warning: libmpv.so.2 was not found; the AppImage will need the host mpv" >&2
-    return 0
+  else
+    if [[ "$mpv" != "$libdir/libmpv.so.2" ]]; then
+      cp -L "$mpv" "$libdir/libmpv.so.2"
+    fi
+    ln -sfn libmpv.so.2 "$libdir/libmpv.so"
   fi
 
-  if [[ "$mpv" != "$libdir/libmpv.so.2" ]]; then
-    cp -L "$mpv" "$libdir/libmpv.so.2"
-  fi
-  ln -sfn libmpv.so.2 "$libdir/libmpv.so"
-
-  # Walk the shared-library graph so libmpv's own dependencies travel with it.
+  # Walk the shared-library graph from libmpv *and* the app bundle. The Flutter
+  # engine and its plugins link a handful of libraries directly (libepoxy is
+  # the usual one); without them the AppImage fails in minimal environments
+  # such as NixOS's appimage-run, which provides GTK but not every sibling.
   declare -A seen=()
-  local queue=("$libdir/libmpv.so.2")
+  local queue=()
+  if [[ -e "$libdir/libmpv.so.2" ]]; then
+    queue+=("$libdir/libmpv.so.2")
+  fi
+  if [[ -f "$BUNDLE/mojac" ]]; then
+    queue+=("$BUNDLE/mojac")
+  fi
+  local bundled
+  for bundled in "$libdir"/*.so*; do
+    if [[ -e "$bundled" ]]; then
+      queue+=("$bundled")
+    fi
+  done
+
   local index=0
   local current dep name copied=0
   while ((index < ${#queue[@]})); do
@@ -171,7 +186,7 @@ bundle_runtime_libraries() {
     done < <(ldd "$current" 2>/dev/null | awk '/=> \//{print $3} /^\//{print $1}')
   done
 
-  echo "Bundled libmpv and $copied runtime libraries into $libdir."
+  echo "Bundled $copied runtime libraries into $libdir."
 }
 
 bundle_runtime_libraries

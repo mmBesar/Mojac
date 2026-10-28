@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
+import 'package:path_provider/path_provider.dart';
 
 const String kMojacUserAgent =
     'Mojac/0.1.0 (+https://github.com/mmbesar/Mojac)';
@@ -22,21 +24,6 @@ class MojacNetworkImage extends ImageProvider<MojacNetworkImage> {
   Future<MojacNetworkImage> obtainKey(ImageConfiguration configuration) {
     return SynchronousFuture<MojacNetworkImage>(this);
   }
-
-  // Identity matters: Flutter's ImageCache deduplicates and reuses entries via
-  // the key's ==/hashCode. Without these, every logo tile owns a private cache
-  // entry, so one big playlist can evict the logos of the source shown before.
-  @override
-  bool operator ==(Object other) =>
-      other is MojacNetworkImage &&
-      other.url == url &&
-      other.allowInsecure == allowInsecure;
-
-  @override
-  int get hashCode => Object.hash(url, allowInsecure);
-
-  @override
-  String toString() => 'MojacNetworkImage("$url")';
 
   @override
   ImageStreamCompleter loadImage(
@@ -60,6 +47,20 @@ class MojacNetworkImage extends ImageProvider<MojacNetworkImage> {
     }
     if (uri.scheme != 'http' && uri.scheme != 'https') {
       throw ArgumentError.value(key.url, 'url', 'Unsupported image scheme');
+    }
+
+    // Logos are served again every time Flutter's in-memory image cache
+    // evicts them (a big playlist can push the previous source out). Keep a
+    // bounded copy on disk so switching sources, restarting, or a busy logo
+    // host does not blank out artwork that was fetched successfully before.
+    final cached = await _readCachedBytes(key.url);
+    if (cached != null) {
+      try {
+        final buffer = await ui.ImmutableBuffer.fromUint8List(cached);
+        return await decode(buffer);
+      } catch (_) {
+        await _deleteCachedBytes(key.url);
+      }
     }
 
     // Large playlists can produce a burst of logo requests. Retry once on
@@ -100,7 +101,9 @@ class MojacNetworkImage extends ImageProvider<MojacNetworkImage> {
           throw StateError('Empty image response');
         }
         final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-        return await decode(buffer);
+        final codec = await decode(buffer);
+        unawaited(_writeCachedBytes(key.url, bytes));
+        return codec;
       } on SocketException catch (error) {
         lastError = error;
       } on HttpException catch (error) {
@@ -115,6 +118,145 @@ class MojacNetworkImage extends ImageProvider<MojacNetworkImage> {
       throw lastError;
     }
     throw StateError('Image request failed');
+  }
+
+  static Directory? _cacheDirectory;
+  static int _cacheWrites = 0;
+
+  static Future<Directory?> _cacheDir() async {
+    final known = _cacheDirectory;
+    if (known != null) {
+      return known;
+    }
+    try {
+      final base = await getTemporaryDirectory();
+      final dir = Directory(
+        '${base.path}${Platform.pathSeparator}mojac_images',
+      );
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      return _cacheDirectory = dir;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// A stable key derived from the URL. `String.hashCode` is not guaranteed to
+  /// survive a restart, so use two FNV-1a passes for a 64-bit-ish filename.
+  static String _cacheKey(String url) {
+    var a = 0x811c9dc5;
+    var b = 0x9e3779b9;
+    for (final byte in utf8.encode(url)) {
+      a = ((a ^ byte) * 0x01000193) & 0xFFFFFFFF;
+      b = ((b + byte) * 0x85ebca6b) & 0xFFFFFFFF;
+    }
+    return '${a.toRadixString(16).padLeft(8, '0')}'
+        '${b.toRadixString(16).padLeft(8, '0')}';
+  }
+
+  static Future<String?> _cachePath(String url) async {
+    final dir = await _cacheDir();
+    if (dir == null) {
+      return null;
+    }
+    return '${dir.path}${Platform.pathSeparator}${_cacheKey(url)}.img';
+  }
+
+  static Future<Uint8List?> _readCachedBytes(String url) async {
+    try {
+      final path = await _cachePath(url);
+      if (path == null) {
+        return null;
+      }
+      final file = File(path);
+      if (!await file.exists()) {
+        return null;
+      }
+      final modified = (await file.stat()).modified;
+      if (DateTime.now().difference(modified) > const Duration(days: 30)) {
+        await file.delete();
+        return null;
+      }
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) {
+        await file.delete();
+        return null;
+      }
+      return bytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _deleteCachedBytes(String url) async {
+    try {
+      final path = await _cachePath(url);
+      if (path == null) {
+        return;
+      }
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {
+      // A missing or locked cache file is not worth reporting.
+    }
+  }
+
+  static Future<void> _writeCachedBytes(String url, Uint8List bytes) async {
+    try {
+      final path = await _cachePath(url);
+      if (path == null) {
+        return;
+      }
+      final temp = File('$path.tmp');
+      await temp.writeAsBytes(bytes, flush: false);
+      await temp.rename(path);
+      if (++_cacheWrites % 64 == 0) {
+        final dir = _cacheDirectory;
+        if (dir != null) {
+          await _pruneCache(dir);
+        }
+      }
+    } catch (_) {
+      // Disk caching is best-effort; the decoded image is already on screen.
+    }
+  }
+
+  /// Keeps the temporary logo cache bounded without touching it on every hit.
+  static Future<void> _pruneCache(Directory dir) async {
+    try {
+      final files = <File>[];
+      await for (final entity in dir.list()) {
+        if (entity is File && entity.path.endsWith('.img')) {
+          files.add(entity);
+        }
+      }
+      if (files.length <= 400) {
+        return;
+      }
+      final entries = await Future.wait(
+        files.map((file) async => (file: file, stat: await file.stat())),
+      );
+      entries.sort((a, b) => a.stat.modified.compareTo(b.stat.modified));
+      var size = 0;
+      final keep = <File>[];
+      for (final entry in entries.reversed) {
+        size += entry.stat.size;
+        if (keep.length < 300 && size <= 96 * 1024 * 1024) {
+          keep.add(entry.file);
+        }
+      }
+      final keepPaths = keep.map((file) => file.path).toSet();
+      for (final entry in entries) {
+        if (!keepPaths.contains(entry.file.path)) {
+          await entry.file.delete();
+        }
+      }
+    } catch (_) {
+      // Pruning is opportunistic; never fail an image load because of it.
+    }
   }
 
   @override

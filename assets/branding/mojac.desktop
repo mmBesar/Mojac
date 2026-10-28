@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Mojac
+GenericName=IPTV Client
+Comment=Bidirectional IPTV client with a 12-hour guide
+Exec=mojac
+Icon=mojac
+Terminal=false
+Categories=AudioVideo;Video;Player;TV;
+Keywords=iptv;m3u;xmltv;tv;stream;
+StartupWMClass=mojac

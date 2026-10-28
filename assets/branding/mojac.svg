@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Mojac">
+  <defs>
+    <linearGradient id="bg" x1="128" y1="96" x2="896" y2="928" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#24273a"/>
+      <stop offset="1" stop-color="#11111b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="292" y1="300" x2="744" y2="700" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f5c2e7"/>
+      <stop offset="0.52" stop-color="#cba6f7"/>
+      <stop offset="1" stop-color="#89b4fa"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
+  <circle cx="512" cy="512" r="356" fill="#181825"/>
+  <circle cx="512" cy="512" r="356" fill="none" stroke="#313244" stroke-width="10"/>
+  <rect x="244" y="300" width="536" height="392" rx="86" fill="none" stroke="url(#accent)" stroke-width="52"/>
+  <path d="M446 408c0-20 22-33 39-22l170 104c17 11 17 36 0 47l-170 104c-17 11-39-2-39-22V408z" fill="url(#accent)"/>
+  <path d="M422 770h180" stroke="url(#accent)" stroke-width="38" stroke-linecap="round"/>
+  <circle cx="706" cy="352" r="18" fill="#a6e3a1"/>
+</svg>

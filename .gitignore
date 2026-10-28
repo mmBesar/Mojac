@@ -38,3 +38,6 @@ dist/
 # Python bytecode from tool/ scripts
 __pycache__/
 *.pyc
+
+# Local AI agent memory / handoff notes
+/AGENTS.md

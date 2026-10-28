@@ -1,3 +1,6 @@
+// The cache directory parameter cannot use an initializing formal because
+// named parameters cannot be private.
+// ignore_for_file: prefer_initializing_formals
 import 'dart:convert';
 import 'dart:io';
 

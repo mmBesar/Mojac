@@ -68,6 +68,13 @@ class _PlayerPageState extends State<PlayerPage> {
     unawaited(_open());
   }
 
+  Future<void> _setMpvProperty(String name, String value) async {
+    final platform = _player.platform;
+    if (platform is NativePlayer) {
+      await platform.setProperty(name, value);
+    }
+  }
+
   Future<void> _open() async {
     final state = context.read<AppState>();
     final allowInsecure = state.activeSource?.allowInsecureCerts ?? false;
@@ -76,10 +83,10 @@ class _PlayerPageState extends State<PlayerPage> {
       _buffering = true;
     });
     try {
-      await _player.setProperty('hwdec', 'auto-safe');
-      await _player.setProperty('keep-open', 'yes');
-      await _player.setProperty('network-timeout', '30');
-      await _player.setProperty('tls-verify', allowInsecure ? 'no' : 'yes');
+      await _setMpvProperty('hwdec', 'auto-safe');
+      await _setMpvProperty('keep-open', 'yes');
+      await _setMpvProperty('network-timeout', '30');
+      await _setMpvProperty('tls-verify', allowInsecure ? 'no' : 'yes');
       await _player.open(
         Media(
           widget.channel.url,

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'core/catppuccin.dart';
 import 'core/theme.dart';
 import 'data/app_state.dart';
+import 'data/models.dart';
 import 'l10n/strings.dart';
 import 'ui/app_shell.dart';
 

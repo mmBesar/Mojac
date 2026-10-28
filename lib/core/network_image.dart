@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -52,7 +51,7 @@ class MojacNetworkImage extends ImageProvider<MojacNetworkImage> {
       ..connectionTimeout = const Duration(seconds: 15)
       ..userAgent = kMojacUserAgent;
     if (key.allowInsecure) {
-      client.badCertificateCallback = (_, __, ___) => true;
+      client.badCertificateCallback = (_, _, _) => true;
     }
 
     try {
@@ -72,7 +71,7 @@ class MojacNetworkImage extends ImageProvider<MojacNetworkImage> {
         throw StateError('Empty image response');
       }
       final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-      return decode(buffer);
+      return await decode(buffer);
     } finally {
       client.close(force: true);
     }

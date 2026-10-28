@@ -68,7 +68,7 @@ class MojacFetcher {
       ..autoUncompress = true;
 
     if (allowInsecure) {
-      client.badCertificateCallback = (_, __, ___) => true;
+      client.badCertificateCallback = (_, _, _) => true;
     }
 
     final userInfo = uri.userInfo;

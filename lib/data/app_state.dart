@@ -1,3 +1,6 @@
+// The storage parameter cannot use an initializing formal because named
+// parameters cannot be private.
+// ignore_for_file: prefer_initializing_formals
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';

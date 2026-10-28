@@ -61,6 +61,10 @@ class _GuidePageState extends State<GuidePage> {
   double _rowStart = 0;
   double _rowEnd = 900;
 
+  /// Guards the one-frame window rollover when the app resumes after enough
+  /// time has passed for "now" to fall outside the displayed twelve hours.
+  bool _windowSyncScheduled = false;
+
   @override
   void initState() {
     super.initState();
@@ -136,6 +140,28 @@ class _GuidePageState extends State<GuidePage> {
       _visibleEnd = hEnd;
       _rowStart = vStart;
       _rowEnd = vEnd;
+    });
+  }
+
+  /// If the app stayed open long enough for the guide window to scroll past
+  /// "now", move it back so the page does not present an empty schedule.
+  void _ensureWindowContainsNow(DateTime now) {
+    if (_windowSyncScheduled) {
+      return;
+    }
+    if (!now.isBefore(_windowStart) && now.isBefore(_windowEnd)) {
+      return;
+    }
+    _windowSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _windowSyncScheduled = false;
+      if (!mounted) {
+        return;
+      }
+      final current = context.read<AppState>().now;
+      if (current.isBefore(_windowStart) || !current.isBefore(_windowEnd)) {
+        _jumpToNow();
+      }
     });
   }
 
@@ -268,6 +294,7 @@ class _GuidePageState extends State<GuidePage> {
     final channels = state.channels;
     final allowInsecure = state.activeSource?.allowInsecureCerts ?? false;
     final now = state.now;
+    _ensureWindowContainsNow(now);
     final nowOffset = now.difference(_windowStart).inSeconds / 60 *
         _pixelsPerMinute;
     final showNow = nowOffset >= 0 && nowOffset <= _timelineWidth;
@@ -875,14 +902,8 @@ class _GuideRow extends StatelessWidget {
     if (width < 1) {
       return const SizedBox.shrink();
     }
-    // The row is already limited to the vertical viewport; also skip
-    // programmes that are horizontally outside it. At the maximum zoom only a
-    // fraction of the twelve-hour timeline is on screen, so this avoids
-    // building hundreds of hidden blocks per frame.
-    if (left + width < visibleStart || left > visibleEnd) {
-      return const SizedBox.shrink();
-    }
     final live = programme.isLiveAt(now);
+    final nearViewport = left + width >= visibleStart && left <= visibleEnd;
     return Positioned(
       left: left,
       top: 5,
@@ -892,7 +913,7 @@ class _GuideRow extends StatelessWidget {
         programme: programme,
         live: live,
         allowInsecure: allowInsecure,
-        showPoster: true,
+        showPoster: nearViewport,
         use24HourTime: use24HourTime,
         onTap: () => showProgrammeSheet(
           context,

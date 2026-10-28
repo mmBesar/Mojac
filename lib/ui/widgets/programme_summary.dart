@@ -115,6 +115,19 @@ class ProgrammeSummary extends StatelessWidget {
               ),
             ],
           ),
+          if (next.subTitle != null)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(top: 1),
+              child: BidiText(
+                next.subTitle!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: style?.copyWith(
+                  color: colors.overlay0,
+                  height: 1.3,
+                ),
+              ),
+            ),
         ],
       ],
     );

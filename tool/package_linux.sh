@@ -101,7 +101,7 @@ should_skip_lib() {
       return 0 ;;
     libX11.so.*|libX11-xcb.so.*|libxcb*.so.*|libXau.so.*|libXdmcp.so.*|libXext.so.*|libXrender.so.*|libXfixes.so.*|libXi.so.*|libXrandr.so.*|libXcomposite.so.*|libXdamage.so.*|libXinerama.so.*|libXcursor.so.*|libwayland*.so.*|libxkbcommon*.so.*)
       return 0 ;;
-    libgtk-3.so.*|libgdk-3.so.*|libgdk_pixbuf*.so.*|libglib-2.0.so.*|libgobject-2.0.so.*|libgio-2.0.so.*|libgmodule-2.0.so.*|libgthread-2.0.so.*|libpango*.so.*|libcairo*.so.*|libharfbuzz.so.*|libfontconfig.so.*|libfreetype.so.*|libatk*.so.*|libatspi*.so.*)
+    libgtk-3.so.*|libgdk-3.so.*|libgdk_pixbuf*.so.*|libglib-2.0.so.*|libgobject-2.0.so.*|libgio-2.0.so.*|libgmodule-2.0.so.*|libgthread-2.0.so.*|libpango*.so.*|libcairo*.so.*|libharfbuzz.so.*|libfontconfig.so.*|libfreetype.so.*|libatk*.so.*|libatspi*.so.*|librsvg-2.so.*)
       return 0 ;;
     libasound.so.*|libpulse*.so.*|libpipewire*.so.*|libdbus-1.so.*|libsystemd.so.*)
       return 0 ;;

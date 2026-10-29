@@ -33,4 +33,16 @@ All notable changes to Mojac are documented here. The format follows
   shadowed.
 - Bundled Noto Sans Arabic font and GPL-3.0-or-later licensing.
 
+### Fixed
+
+- Linux playback now uses media_kit's software video output. The isolated
+  EGLImage texture path could freeze on its first frame on Wayland/Mesa and
+  take the UI with it; set `MOJAC_MPV_LOG=1` to get libmpv diagnostics.
+- Guide programme blocks show posters from 92 px wide (54x74 posters above
+  196 px) instead of only on very wide blocks, so EPG artwork appears again.
+- Very short guide programmes no longer draw ellipsis tiles that looked like
+  missing guide data; they show just a clipped poster thumbnail instead.
+- The XMLTV file field suggests a `.xml` example instead of the playlist's
+  `.m3u` one.
+
 [0.1.0]: https://github.com/mmbesar/Mojac/releases/tag/v0.1.0

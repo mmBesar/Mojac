@@ -966,16 +966,29 @@ class _ProgrammeBlock extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final wide = constraints.maxWidth > 110;
               final textScale =
                   MediaQuery.textScalerOf(context).scale(12) / 12;
               // Large accessibility font sizes would otherwise push the live
               // badge, title, subtitle and time past the fixed row height.
-              final detailed = wide && textScale <= 1.2;
-              final withPoster = showPoster &&
-                  detailed &&
-                  constraints.maxWidth > 190 &&
-                  textScale <= 1.15;
+              final detailed =
+                  constraints.maxWidth > 110 && textScale <= 1.2;
+              // Very short programmes leave only a few pixels inside the
+              // block, where an ellipsis reads as missing guide data. Those
+              // slivers get a clipped poster instead of text.
+              final hasText = constraints.maxWidth >= 44;
+
+              double posterWidth = 0;
+              double posterHeight = 0;
+              if (showPoster) {
+                if (constraints.maxWidth >= 196 && textScale <= 1.15) {
+                  posterWidth = 54;
+                  posterHeight = 74;
+                } else if (constraints.maxWidth >= 92 && textScale <= 1.3) {
+                  posterWidth = 30;
+                  posterHeight = 40;
+                }
+              }
+              final withPoster = posterWidth > 0;
 
               final title = BidiText(
                 programme.title,
@@ -1000,10 +1013,46 @@ class _ProgrammeBlock extends StatelessWidget {
                               ),
                     );
 
+              if (!hasText) {
+                // Keep a thumbnail in slivers that cannot fit a label: it
+                // still marks the programme and keeps the guide's artwork
+                // visible on channels with many short episodes.
+                if (!showPoster || constraints.maxWidth < 14) {
+                  return const SizedBox.shrink();
+                }
+                final thumbWidth = math.min(constraints.maxWidth, 22.0);
+                return ClipRect(
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: ProgrammePoster(
+                      programme: programme,
+                      allowInsecure: allowInsecure,
+                      width: thumbWidth,
+                      height:
+                          math.min(constraints.maxHeight, thumbWidth * 1.35),
+                      radius: 4,
+                    ),
+                  ),
+                );
+              }
+
               if (!detailed) {
-                // Even the narrowest block carries the sub-title, so short
-                // programmes still show e.g. the episode name.
+                // Even the narrowest readable block carries the sub-title, so
+                // short programmes still show e.g. the episode name.
                 final compactSubtitle = textScale <= 1.8 ? subtitle : null;
+                final compactText = ClipRect(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      title,
+                      if (compactSubtitle != null) ...<Widget>[
+                        const SizedBox(height: 1),
+                        compactSubtitle,
+                      ],
+                    ],
+                  ),
+                );
                 return Directionality(
                   textDirection: bidiDirectionOf(programme.title),
                   child: Stack(
@@ -1011,19 +1060,21 @@ class _ProgrammeBlock extends StatelessWidget {
                       Positioned.fill(
                         child: Align(
                           alignment: AlignmentDirectional.centerStart,
-                          child: ClipRect(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                title,
-                                if (compactSubtitle != null) ...<Widget>[
-                                  const SizedBox(height: 1),
-                                  compactSubtitle,
-                                ],
-                              ],
-                            ),
-                          ),
+                          child: withPoster
+                              ? Row(
+                                  children: <Widget>[
+                                    ProgrammePoster(
+                                      programme: programme,
+                                      allowInsecure: allowInsecure,
+                                      width: posterWidth,
+                                      height: posterHeight,
+                                      radius: 6,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(child: compactText),
+                                  ],
+                                )
+                              : compactText,
                         ),
                       ),
                       if (live)
@@ -1117,8 +1168,8 @@ class _ProgrammeBlock extends StatelessWidget {
                     ProgrammePoster(
                       programme: programme,
                       allowInsecure: allowInsecure,
-                      width: 54,
-                      height: 74,
+                      width: posterWidth,
+                      height: posterHeight,
                       radius: 7,
                     ),
                     const SizedBox(width: 8),

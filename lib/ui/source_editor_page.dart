@@ -248,6 +248,7 @@ class _SourceEditorPageState extends State<SourceEditorPage> {
                 _EndpointField(
                   label: strings.playlistM3u,
                   hint: 'https://example.com/channels.m3u',
+                  fileHint: '/home/you/channels.m3u',
                   help: strings.playlistHelp,
                   controller: _m3u,
                   kind: _m3uKind,
@@ -261,6 +262,7 @@ class _SourceEditorPageState extends State<SourceEditorPage> {
                 _EndpointField(
                   label: strings.xmltvGuide,
                   hint: 'https://example.com/xmltv.xml',
+                  fileHint: '/home/you/guide.xml',
                   help: strings.guideHelp,
                   controller: _epg,
                   kind: _epgKind,
@@ -330,6 +332,7 @@ class _EndpointField extends StatelessWidget {
   const _EndpointField({
     required this.label,
     required this.hint,
+    required this.fileHint,
     required this.help,
     required this.controller,
     required this.kind,
@@ -342,6 +345,7 @@ class _EndpointField extends StatelessWidget {
 
   final String label;
   final String hint;
+  final String fileHint;
   final String help;
   final TextEditingController controller;
   final EndpointKind kind;
@@ -373,7 +377,7 @@ class _EndpointField extends StatelessWidget {
           textDirection: TextDirection.ltr,
           textAlign: TextAlign.start,
           decoration: InputDecoration(
-            hintText: isFile ? '/home/you/channels.m3u' : hint,
+            hintText: isFile ? fileHint : hint,
             prefixIcon: Icon(
               isFile ? Icons.insert_drive_file_outlined : Icons.link_rounded,
             ),

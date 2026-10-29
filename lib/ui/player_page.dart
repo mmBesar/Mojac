@@ -27,6 +27,13 @@ class PlayerPage extends StatefulWidget {
 }
 
 class _PlayerPageState extends State<PlayerPage> {
+  /// Set `MOJAC_MPV_LOG=1` to get libmpv's informational log on stderr when
+  /// diagnosing a stream that will not start.
+  static final MPVLogLevel _mpvLogLevel =
+      (Platform.environment['MOJAC_MPV_LOG'] ?? '').trim().isEmpty
+          ? MPVLogLevel.error
+          : MPVLogLevel.info;
+
   late final Player _player;
   late final VideoController _controller;
   StreamSubscription<String>? _errorSubscription;
@@ -53,9 +60,22 @@ class _PlayerPageState extends State<PlayerPage> {
   void initState() {
     super.initState();
     _player = Player(
-      configuration: PlayerConfiguration(title: 'Mojac — ${widget.channel.name}'),
+      configuration: PlayerConfiguration(
+        title: 'Mojac — ${widget.channel.name}',
+        logLevel: _mpvLogLevel,
+      ),
     );
-    _controller = VideoController(_player);
+    _controller = VideoController(
+      _player,
+      configuration: VideoControllerConfiguration(
+        // media_kit 2.0.1 renders Linux video through an isolated EGL context
+        // and an EGLImage texture. On Wayland/Mesa that texture can stall on
+        // its first frame and take the whole UI down with it. The bundled
+        // libmpv exposes MPV_RENDER_API_TYPE_SW, so use the CPU upload path
+        // on Linux instead and keep the faster H/W path elsewhere.
+        enableHardwareAcceleration: !Platform.isLinux,
+      ),
+    );
     _volume = _player.state.volume;
 
     _errorSubscription = _player.stream.error.listen((message) {
@@ -170,7 +190,9 @@ class _PlayerPageState extends State<PlayerPage> {
       _buffering = true;
     });
     try {
-      await _setMpvProperty('hwdec', 'auto-safe');
+      // The Linux software video path avoids the EGLImage texture entirely,
+      // so keep decoding on the CPU too and let libmpv convert directly.
+      await _setMpvProperty('hwdec', Platform.isLinux ? 'no' : 'auto-safe');
       await _setMpvProperty('keep-open', 'yes');
       await _setMpvProperty('network-timeout', '30');
       await _setMpvProperty('tls-verify', allowInsecure ? 'no' : 'yes');

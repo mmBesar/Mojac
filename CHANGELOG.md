@@ -35,6 +35,13 @@ All notable changes to Mojac are documented here. The format follows
 
 ### Fixed
 
+- HLS streams whose master playlist advertises a subtitle rendition play again.
+  media_kit hands ffmpeg `strict=experimental`, which enables its unfinished
+  `EXT-X-MEDIA` support; ErsatzTV publishes a `DEFAULT=YES` WebVTT rendition,
+  so ffmpeg switched to the subtitle playlist and read `.vtt` segments only,
+  leaving video and audio silent behind the spinner while the server kept
+  transcoding. The player now passes the same demuxer options without that
+  flag, so the rendition is ignored and the video playlist stays active.
 - Linux playback now uses media_kit's software video output. The isolated
   EGLImage texture path could freeze on its first frame on Wayland/Mesa and
   take the UI with it; set `MOJAC_MPV_LOG=1` to get libmpv diagnostics.

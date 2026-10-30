@@ -54,6 +54,20 @@ class _PlayerPageState extends State<PlayerPage> {
   static const int _softwareVideoWidth = 1280;
   static const int _softwareVideoHeight = 720;
 
+  /// media_kit always passes `strict=experimental` to ffmpeg's demuxer. That
+  /// switches on its unfinished `EXT-X-MEDIA` handling, and an HLS master that
+  /// advertises a subtitle rendition (ErsatzTV publishes a `DEFAULT=YES`
+  /// WebVTT one) then makes ffmpeg attach the subtitle playlist to the variant
+  /// and read `.vtt` segments only. No video or audio packet ever arrives, so
+  /// playback buffers forever even though the server is transcoding. Passing
+  /// the same options without the experimental flag makes ffmpeg ignore the
+  /// rendition and keep the video playlist active.
+  static final String _demuxerLavfOptions = <String>[
+    'seg_max_retry=5',
+    'allowed_extensions=ALL',
+    'protocol_whitelist=[${const PlayerConfiguration().protocolWhitelist.join(',')}]',
+  ].join(',');
+
   late final Player _player;
   late final VideoController _controller;
   StreamSubscription<String>? _errorSubscription;
@@ -314,6 +328,7 @@ class _PlayerPageState extends State<PlayerPage> {
       await _setMpvProperty('keep-open', 'yes');
       await _setMpvProperty('network-timeout', '60');
       await _setMpvProperty('tls-verify', allowInsecure ? 'no' : 'yes');
+      await _setMpvProperty('demuxer-lavf-o', _demuxerLavfOptions);
       await _player.open(
         Media(
           widget.channel.url,

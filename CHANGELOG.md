@@ -41,6 +41,10 @@ All notable changes to Mojac are documented here. The format follows
 - The Linux software output now starts with a 1280x720 texture and follows the
   stream's aspect ratio. Without a known size media_kit never rendered a first
   frame, so playback stalled behind a black texture with no audio.
+- Live streams get 60 seconds to produce their first segment instead of 30.
+  Android playback also reports libmpv's messages and dumps player state after
+  10, 20 and 30 seconds of buffering to `adb logcat`, above the endless
+  spinner in the UI.
 - Guide programme blocks show posters from 92 px wide (54x74 posters above
   196 px) instead of only on very wide blocks, so EPG artwork appears again.
 - Very short guide programmes no longer draw ellipsis tiles that looked like

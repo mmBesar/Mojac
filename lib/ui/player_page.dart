@@ -29,9 +29,12 @@ class PlayerPage extends StatefulWidget {
 
 class _PlayerPageState extends State<PlayerPage> {
   /// Set `MOJAC_MPV_LOG=1` to get libmpv's informational log on stderr when
-  /// diagnosing a stream that will not start.
+  /// diagnosing a stream that will not start. Android has no easy way to set
+  /// environment variables for an installed APK, so keep libmpv's messages in
+  /// `adb logcat` there until live HLS playback is sorted out.
   static final MPVLogLevel _mpvLogLevel =
-      (Platform.environment['MOJAC_MPV_LOG'] ?? '').trim().isEmpty
+      (Platform.environment['MOJAC_MPV_LOG'] ?? '').trim().isEmpty &&
+              !Platform.isAndroid
           ? MPVLogLevel.error
           : MPVLogLevel.info;
 
@@ -49,7 +52,9 @@ class _PlayerPageState extends State<PlayerPage> {
   StreamSubscription<VideoParams>? _videoParamsSubscription;
   StreamSubscription<bool>? _bufferingSubscription;
   StreamSubscription<double>? _volumeSubscription;
+  StreamSubscription<PlayerLog>? _logSubscription;
   (int, int)? _softwareVideoSize;
+  Timer? _bufferingWatchdog;
 
   String? _error;
   bool _buffering = false;
@@ -110,10 +115,22 @@ class _PlayerPageState extends State<PlayerPage> {
       if (mounted && _buffering != buffering) {
         setState(() => _buffering = buffering);
       }
+      _watchBuffering(buffering);
     });
     _volumeSubscription = _player.stream.volume.listen((volume) {
       _volume = volume;
     });
+    if (Platform.isAndroid) {
+      // libmpv's messages are only exposed through this stream; without it
+      // `adb logcat` shows nothing about a stalled HLS stream.
+      _logSubscription = _player.stream.log.listen((log) {
+        final text = log.text.trim();
+        if (text.isEmpty) {
+          return;
+        }
+        debugPrint('mpv[${log.level}] ${log.prefix}: $text');
+      });
+    }
 
     unawaited(
       WakelockPlus.enable().catchError((Object error) {
@@ -192,6 +209,60 @@ class _PlayerPageState extends State<PlayerPage> {
     });
   }
 
+  /// Live HLS can sit in buffering for a long time. Dump libmpv's state while
+  /// that happens, so `adb logcat` shows where playback is stuck instead of
+  /// only an endless spinner in the UI.
+  void _watchBuffering(bool buffering) {
+    _bufferingWatchdog?.cancel();
+    _bufferingWatchdog = null;
+    if (!buffering) {
+      return;
+    }
+    var ticks = 0;
+    _bufferingWatchdog = Timer.periodic(const Duration(seconds: 10), (timer) {
+      ticks += 1;
+      unawaited(_logPlaybackState(ticks));
+      if (ticks >= 3) {
+        timer.cancel();
+      }
+    });
+  }
+
+  Future<void> _logPlaybackState(int tick) async {
+    final platform = _player.platform;
+    if (platform is! NativePlayer) {
+      return;
+    }
+    const properties = <String>[
+      'path',
+      'idle-active',
+      'core-idle',
+      'paused-for-cache',
+      'cache-buffering-state',
+      'demuxer-cache-state/underrun',
+      'demuxer-cache-state/fw-bytes',
+      'video-params/w',
+      'video-params/codec',
+      'video-codec',
+      'audio-codec-name',
+      'current-tracks/audio/id',
+      'track-list/count',
+      'seeking',
+      'eof-reached',
+      'time-pos',
+    ];
+    final snapshot = StringBuffer('Playback stalled for ${tick * 10}s:');
+    for (final property in properties) {
+      try {
+        final value = await platform.getProperty(property);
+        snapshot.write(' $property=$value');
+      } catch (_) {
+        // The property is not available in this libmpv build.
+      }
+    }
+    debugPrint(snapshot.toString());
+  }
+
   /// Keeps the Linux software texture at the stream's aspect ratio without
   /// exceeding media_kit's 1920x1080 software buffer.
   void _resizeSoftwareVideo(VideoParams params) {
@@ -232,7 +303,7 @@ class _PlayerPageState extends State<PlayerPage> {
       // so keep decoding on the CPU too and let libmpv convert directly.
       await _setMpvProperty('hwdec', Platform.isLinux ? 'no' : 'auto-safe');
       await _setMpvProperty('keep-open', 'yes');
-      await _setMpvProperty('network-timeout', '30');
+      await _setMpvProperty('network-timeout', '60');
       await _setMpvProperty('tls-verify', allowInsecure ? 'no' : 'yes');
       await _player.open(
         Media(
@@ -296,6 +367,8 @@ class _PlayerPageState extends State<PlayerPage> {
     _bufferingSubscription?.cancel();
     _volumeSubscription?.cancel();
     _videoParamsSubscription?.cancel();
+    _logSubscription?.cancel();
+    _bufferingWatchdog?.cancel();
     if (_brightnessSupported) {
       unawaited(
         ScreenBrightness()

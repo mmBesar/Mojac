@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,12 +35,21 @@ class _PlayerPageState extends State<PlayerPage> {
           ? MPVLogLevel.error
           : MPVLogLevel.info;
 
+  /// media_kit_video's Linux software renderer only renders a frame once it
+  /// knows the output size, but it reads that size from the frame it refuses
+  /// to render, so a controller without a fixed size never starts. Seed it
+  /// with 720p and follow the stream's own aspect ratio from then on.
+  static const int _softwareVideoWidth = 1280;
+  static const int _softwareVideoHeight = 720;
+
   late final Player _player;
   late final VideoController _controller;
   StreamSubscription<String>? _errorSubscription;
   StreamSubscription<bool>? _playingSubscription;
+  StreamSubscription<VideoParams>? _videoParamsSubscription;
   StreamSubscription<bool>? _bufferingSubscription;
   StreamSubscription<double>? _volumeSubscription;
+  (int, int)? _softwareVideoSize;
 
   String? _error;
   bool _buffering = false;
@@ -74,9 +84,16 @@ class _PlayerPageState extends State<PlayerPage> {
         // libmpv exposes MPV_RENDER_API_TYPE_SW, so use the CPU upload path
         // on Linux instead and keep the faster H/W path elsewhere.
         enableHardwareAcceleration: !Platform.isLinux,
+        width: Platform.isLinux ? _softwareVideoWidth : null,
+        height: Platform.isLinux ? _softwareVideoHeight : null,
       ),
     );
     _volume = _player.state.volume;
+    if (Platform.isLinux) {
+      _videoParamsSubscription = _player.stream.videoParams.listen(
+        _resizeSoftwareVideo,
+      );
+    }
 
     _errorSubscription = _player.stream.error.listen((message) {
       if (!mounted || message.trim().isEmpty) {
@@ -175,6 +192,27 @@ class _PlayerPageState extends State<PlayerPage> {
     });
   }
 
+  /// Keeps the Linux software texture at the stream's aspect ratio without
+  /// exceeding media_kit's 1920x1080 software buffer.
+  void _resizeSoftwareVideo(VideoParams params) {
+    final double width = (params.dw ?? params.w ?? 0).toDouble();
+    final double height = (params.dh ?? params.h ?? 0).toDouble();
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+    final double scale = math.min(1.0, math.min(1920 / width, 1080 / height));
+    final int targetWidth = (width * scale).round() & ~1;
+    final int targetHeight = (height * scale).round() & ~1;
+    if (targetWidth <= 0 || targetHeight <= 0) {
+      return;
+    }
+    if (_softwareVideoSize == (targetWidth, targetHeight)) {
+      return;
+    }
+    _softwareVideoSize = (targetWidth, targetHeight);
+    unawaited(_controller.setSize(width: targetWidth, height: targetHeight));
+  }
+
   Future<void> _setMpvProperty(String name, String value) async {
     final platform = _player.platform;
     if (platform is NativePlayer) {
@@ -257,6 +295,7 @@ class _PlayerPageState extends State<PlayerPage> {
     _playingSubscription?.cancel();
     _bufferingSubscription?.cancel();
     _volumeSubscription?.cancel();
+    _videoParamsSubscription?.cancel();
     if (_brightnessSupported) {
       unawaited(
         ScreenBrightness()

@@ -38,6 +38,9 @@ All notable changes to Mojac are documented here. The format follows
 - Linux playback now uses media_kit's software video output. The isolated
   EGLImage texture path could freeze on its first frame on Wayland/Mesa and
   take the UI with it; set `MOJAC_MPV_LOG=1` to get libmpv diagnostics.
+- The Linux software output now starts with a 1280x720 texture and follows the
+  stream's aspect ratio. Without a known size media_kit never rendered a first
+  frame, so playback stalled behind a black texture with no audio.
 - Guide programme blocks show posters from 92 px wide (54x74 posters above
   196 px) instead of only on very wide blocks, so EPG artwork appears again.
 - Very short guide programmes no longer draw ellipsis tiles that looked like

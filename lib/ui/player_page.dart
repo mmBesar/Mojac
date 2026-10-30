@@ -29,14 +29,23 @@ class PlayerPage extends StatefulWidget {
 
 class _PlayerPageState extends State<PlayerPage> {
   /// Set `MOJAC_MPV_LOG=1` to get libmpv's informational log on stderr when
-  /// diagnosing a stream that will not start. Android has no easy way to set
-  /// environment variables for an installed APK, so keep libmpv's messages in
-  /// `adb logcat` there until live HLS playback is sorted out.
-  static final MPVLogLevel _mpvLogLevel =
-      (Platform.environment['MOJAC_MPV_LOG'] ?? '').trim().isEmpty &&
-              !Platform.isAndroid
-          ? MPVLogLevel.error
-          : MPVLogLevel.info;
+  /// diagnosing a stream that will not start. An installed APK has no easy way
+  /// to set environment variables, so on Android errors go to `adb logcat`
+  /// instead, where they are rare enough not to flood the log.
+  static final MPVLogLevel _mpvLogLevel = _resolveMpvLogLevel();
+
+  static MPVLogLevel _resolveMpvLogLevel() {
+    if (Platform.isAndroid) {
+      return MPVLogLevel.error;
+    }
+    try {
+      final flag = (Platform.environment['MOJAC_MPV_LOG'] ?? '').trim();
+      return flag.isEmpty ? MPVLogLevel.error : MPVLogLevel.info;
+    } catch (_) {
+      // Not every platform exposes the environment.
+      return MPVLogLevel.error;
+    }
+  }
 
   /// media_kit_video's Linux software renderer only renders a frame once it
   /// knows the output size, but it reads that size from the frame it refuses

@@ -10,6 +10,42 @@ import 'package:path_provider/path_provider.dart';
 const String kMojacUserAgent =
     'Mojac/0.1.0 (+https://github.com/mmbesar/Mojac)';
 
+/// Every poster and logo owns a socket while it downloads. A guide built from
+/// a full XMLTV file can ask for thousands of images at once, and that burst
+/// starves the player's HLS requests and the playlist/EPG refreshes that hit
+/// the same host. Fetch through a small fixed number of slots instead of
+/// letting the whole screen go out at the same time.
+class _FetchLimiter {
+  _FetchLimiter(this.maxConcurrent);
+
+  final int maxConcurrent;
+  int _active = 0;
+  final List<Completer<void>> _waiting = <Completer<void>>[];
+
+  Future<void> acquire() {
+    if (_active < maxConcurrent) {
+      _active += 1;
+      return Future<void>.value();
+    }
+    final completer = Completer<void>();
+    _waiting.add(completer);
+    return completer.future;
+  }
+
+  void release() {
+    if (_waiting.isNotEmpty) {
+      // Hand this slot straight to the next waiter without freeing it.
+      _waiting.removeAt(0).complete();
+      return;
+    }
+    if (_active > 0) {
+      _active -= 1;
+    }
+  }
+}
+
+final _FetchLimiter _imageFetches = _FetchLimiter(6);
+
 /// An [ImageProvider] for channel logos that understands Mojac's per-source
 /// "allow self-signed certificates" setting. Plain [NetworkImage] uses the
 /// platform HTTP stack, which cannot be told to trust a specific source.
@@ -67,61 +103,70 @@ class MojacNetworkImage extends ImageProvider<MojacNetworkImage> {
     // transient failures (timeouts, connection resets, 429/5xx) so a busy
     // source does not leave permanent fallback tiles in the channel list.
     Object? lastError;
-    for (var attempt = 0; attempt < 2; attempt++) {
-      if (attempt > 0) {
-        await Future<void>.delayed(const Duration(milliseconds: 400));
-      }
-      final client = HttpClient()
-        ..connectionTimeout = const Duration(seconds: 12)
-        ..userAgent = kMojacUserAgent;
-      if (key.allowInsecure) {
-        client.badCertificateCallback = (_, _, _) => true;
-      }
+    await _imageFetches.acquire();
+    try {
+      for (var attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) {
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+        }
+        final client = HttpClient()
+          ..connectionTimeout = const Duration(seconds: 12)
+          ..userAgent = kMojacUserAgent;
+        if (key.allowInsecure) {
+          client.badCertificateCallback = (_, _, _) => true;
+        }
 
-      try {
-        final request = await client.getUrl(uri);
-        request.headers.set(HttpHeaders.acceptHeader, 'image/*,*/*;q=0.8');
-        final response = await request.close();
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          await response.drain<void>();
-          final error = NetworkImageLoadException(
-            statusCode: response.statusCode,
-            uri: uri,
-          );
-          if (response.statusCode != 429 && response.statusCode < 500) {
-            throw error;
+        try {
+          final request = await client
+              .getUrl(uri)
+              .timeout(const Duration(seconds: 15));
+          request.headers.set(HttpHeaders.acceptHeader, 'image/*,*/*;q=0.8');
+          final response =
+              await request.close().timeout(const Duration(seconds: 15));
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            await response.drain<void>();
+            final error = NetworkImageLoadException(
+              statusCode: response.statusCode,
+              uri: uri,
+            );
+            if (response.statusCode != 429 && response.statusCode < 500) {
+              throw error;
+            }
+            lastError = error;
+            continue;
           }
+          final Uint8List bytes =
+              await consolidateHttpClientResponseBytes(response)
+                  .timeout(const Duration(seconds: 20));
+          if (bytes.isEmpty) {
+            throw StateError('Empty image response');
+          }
+          final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+          final codec = await decode(buffer);
+          unawaited(_writeCachedBytes(key.url, bytes));
+          return codec;
+        } on SocketException catch (error) {
           lastError = error;
-          continue;
+        } on HttpException catch (error) {
+          lastError = error;
+        } on TimeoutException catch (error) {
+          lastError = error;
+        } finally {
+          client.close(force: true);
         }
-        final Uint8List bytes =
-            await consolidateHttpClientResponseBytes(response)
-                .timeout(const Duration(seconds: 20));
-        if (bytes.isEmpty) {
-          throw StateError('Empty image response');
-        }
-        final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-        final codec = await decode(buffer);
-        unawaited(_writeCachedBytes(key.url, bytes));
-        return codec;
-      } on SocketException catch (error) {
-        lastError = error;
-      } on HttpException catch (error) {
-        lastError = error;
-      } on TimeoutException catch (error) {
-        lastError = error;
-      } finally {
-        client.close(force: true);
       }
+      if (lastError != null) {
+        throw lastError;
+      }
+      throw StateError('Image request failed');
+    } finally {
+      _imageFetches.release();
     }
-    if (lastError != null) {
-      throw lastError;
-    }
-    throw StateError('Image request failed');
   }
 
   static Directory? _cacheDirectory;
   static int _cacheWrites = 0;
+  static bool _pruning = false;
 
   static Future<Directory?> _cacheDir() async {
     final known = _cacheDirectory;
@@ -213,7 +258,7 @@ class MojacNetworkImage extends ImageProvider<MojacNetworkImage> {
       final temp = File('$path.tmp');
       await temp.writeAsBytes(bytes, flush: false);
       await temp.rename(path);
-      if (++_cacheWrites % 64 == 0) {
+      if (++_cacheWrites % 256 == 0) {
         final dir = _cacheDirectory;
         if (dir != null) {
           await _pruneCache(dir);
@@ -226,6 +271,10 @@ class MojacNetworkImage extends ImageProvider<MojacNetworkImage> {
 
   /// Keeps the temporary logo cache bounded without touching it on every hit.
   static Future<void> _pruneCache(Directory dir) async {
+    if (_pruning) {
+      return;
+    }
+    _pruning = true;
     try {
       final files = <File>[];
       await for (final entity in dir.list()) {
@@ -256,6 +305,8 @@ class MojacNetworkImage extends ImageProvider<MojacNetworkImage> {
       }
     } catch (_) {
       // Pruning is opportunistic; never fail an image load because of it.
+    } finally {
+      _pruning = false;
     }
   }
 

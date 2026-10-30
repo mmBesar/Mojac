@@ -45,10 +45,14 @@ All notable changes to Mojac are documented here. The format follows
   Android playback also reports libmpv's messages and dumps player state after
   10, 20 and 30 seconds of buffering to `adb logcat`, above the endless
   spinner in the UI.
-- Guide programme blocks show posters from 92 px wide (54x74 posters above
-  196 px) instead of only on very wide blocks, so EPG artwork appears again.
-- Very short guide programmes no longer draw ellipsis tiles that looked like
-  missing guide data; they show just a clipped poster thumbnail instead.
+- Guide blocks only request artwork above 190 px wide again. Widening that rule
+  to 92 px made a phone guide download thousands of full-size XMLTV posters
+  (Tunarr serves ~570 KB each), which starved playback and source refreshes
+  from the same host. Very short programmes still avoid the misleading
+  ellipsis tile.
+- Artwork downloads are queued behind six concurrent fetches, so a screen
+  full of posters can no longer exhaust sockets or starve playback and EPG
+  refreshes, and the disk cache prunes far less often.
 - The XMLTV file field suggests a `.xml` example instead of the playlist's
   `.m3u` one.
 

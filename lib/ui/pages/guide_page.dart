@@ -973,22 +973,18 @@ class _ProgrammeBlock extends StatelessWidget {
               final detailed =
                   constraints.maxWidth > 110 && textScale <= 1.2;
               // Very short programmes leave only a few pixels inside the
-              // block, where an ellipsis reads as missing guide data. Those
-              // slivers get a clipped poster instead of text.
+              // block, where an ellipsis reads as missing guide data.
               final hasText = constraints.maxWidth >= 44;
-
-              double posterWidth = 0;
-              double posterHeight = 0;
-              if (showPoster) {
-                if (constraints.maxWidth >= 196 && textScale <= 1.15) {
-                  posterWidth = 54;
-                  posterHeight = 74;
-                } else if (constraints.maxWidth >= 92 && textScale <= 1.3) {
-                  posterWidth = 30;
-                  posterHeight = 40;
-                }
-              }
-              final withPoster = posterWidth > 0;
+              // Only large blocks carry artwork. XMLTV posters are full-size
+              // bitmaps (Tunarr serves ~570 KB each), and a twelve-hour guide
+              // on a phone holds thousands of programmes, so widening this
+              // rule turns the guide into a multi-hundred-megabyte download
+              // that starves playback and playlist refreshes from the same
+              // host.
+              final withPoster = showPoster &&
+                  detailed &&
+                  constraints.maxWidth > 190 &&
+                  textScale <= 1.15;
 
               final title = BidiText(
                 programme.title,
@@ -1014,45 +1010,16 @@ class _ProgrammeBlock extends StatelessWidget {
                     );
 
               if (!hasText) {
-                // Keep a thumbnail in slivers that cannot fit a label: it
-                // still marks the programme and keeps the guide's artwork
-                // visible on channels with many short episodes.
-                if (!showPoster || constraints.maxWidth < 14) {
-                  return const SizedBox.shrink();
-                }
-                final thumbWidth = math.min(constraints.maxWidth, 22.0);
-                return ClipRect(
-                  child: Align(
-                    alignment: AlignmentDirectional.centerStart,
-                    child: ProgrammePoster(
-                      programme: programme,
-                      allowInsecure: allowInsecure,
-                      width: thumbWidth,
-                      height:
-                          math.min(constraints.maxHeight, thumbWidth * 1.35),
-                      radius: 4,
-                    ),
-                  ),
-                );
+                // A sliver cannot fit a label, and an ellipsis tile reads as
+                // missing guide data. Leave it empty: a thumbnail here would
+                // add one image request per short programme.
+                return const SizedBox.shrink();
               }
 
               if (!detailed) {
                 // Even the narrowest readable block carries the sub-title, so
                 // short programmes still show e.g. the episode name.
                 final compactSubtitle = textScale <= 1.8 ? subtitle : null;
-                final compactText = ClipRect(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      title,
-                      if (compactSubtitle != null) ...<Widget>[
-                        const SizedBox(height: 1),
-                        compactSubtitle,
-                      ],
-                    ],
-                  ),
-                );
                 return Directionality(
                   textDirection: bidiDirectionOf(programme.title),
                   child: Stack(
@@ -1060,21 +1027,19 @@ class _ProgrammeBlock extends StatelessWidget {
                       Positioned.fill(
                         child: Align(
                           alignment: AlignmentDirectional.centerStart,
-                          child: withPoster
-                              ? Row(
-                                  children: <Widget>[
-                                    ProgrammePoster(
-                                      programme: programme,
-                                      allowInsecure: allowInsecure,
-                                      width: posterWidth,
-                                      height: posterHeight,
-                                      radius: 6,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Expanded(child: compactText),
-                                  ],
-                                )
-                              : compactText,
+                          child: ClipRect(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                title,
+                                if (compactSubtitle != null) ...<Widget>[
+                                  const SizedBox(height: 1),
+                                  compactSubtitle,
+                                ],
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                       if (live)
@@ -1168,8 +1133,8 @@ class _ProgrammeBlock extends StatelessWidget {
                     ProgrammePoster(
                       programme: programme,
                       allowInsecure: allowInsecure,
-                      width: posterWidth,
-                      height: posterHeight,
+                      width: 54,
+                      height: 74,
                       radius: 7,
                     ),
                     const SizedBox(width: 8),

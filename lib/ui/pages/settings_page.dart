@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +11,7 @@ import '../../core/theme.dart';
 import '../../data/app_state.dart';
 import '../../data/models.dart';
 import '../../l10n/strings.dart';
+import '../../player/mpv_client.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key, required this.onOpenSources});
@@ -150,6 +152,28 @@ class SettingsPage extends StatelessWidget {
                     ),
                   ],
                 ),
+                // The switch only matters when a system mpv is installed;
+                // without one the launcher falls back to the built-in player.
+                if (Platform.isLinux && MpvClient.resolveBinary() != null)
+                  _Section(
+                    title: strings.playback,
+                    children: <Widget>[
+                      SwitchListTile(
+                        value: settings.nativePlayer,
+                        onChanged: (value) =>
+                            unawaited(state.setNativePlayer(value)),
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(strings.nativePlayer),
+                        subtitle: Text(
+                          strings.nativePlayerHelp,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: colors.subtext0,
+                                  ),
+                        ),
+                      ),
+                    ],
+                  ),
                 _Section(
                   title: strings.dataAndGuide,
                   children: <Widget>[

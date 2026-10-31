@@ -238,6 +238,37 @@ class AppStrings {
   String get streamUnavailable =>
       isArabic ? 'البث غير متاح' : 'Stream unavailable';
 
+  String get playback => isArabic ? 'التشغيل' : 'Playback';
+  String get nativePlayer => isArabic
+      ? 'استخدام مشغّل mpv النظامي'
+      : 'Use the system mpv player';
+  String get nativePlayerHelp => isArabic
+      ? 'يسلّم التشغيل على سطح المكتب القناة إلى مشغّل mpv النظامي، فيفكّ الترميز عبر كرت الرسوميات ويوفّر ملء شاشة حقيقياً وأدوات تحكم أصلية. أوقف هذا الخيار لاستخدام المشغّل المدمج.'
+      : 'Desktop playback hands the channel to the system mpv, which decodes with the GPU and provides real fullscreen and native controls. Turn this off to use the built-in player instead.';
+  String get nativePlaybackTitle =>
+      isArabic ? 'التشغيل عبر mpv' : 'Playing in mpv';
+  String get nativePlaybackBody => isArabic
+      ? 'الفيديو في نافذة mpv مستقلة، بفكّ ترميز عتادي وملء شاشة حقيقي. هذه الصفحة هي جهاز التحكم.'
+      : 'The video plays in its own mpv window with hardware decoding and real fullscreen. This page is the remote control.';
+  String get nativePlaybackShortcuts => isArabic
+      ? 'داخل نافذة mpv: عجلة الفأرة تغيّر الصوت، وf لملء الشاشة، وm لكتم الصوت، والمسافة للإيقاف المؤقت.'
+      : 'In the mpv window: the scroll wheel changes volume, f toggles fullscreen, m mutes, and space pauses.';
+  String get nativePlaybackStarting =>
+      isArabic ? 'جارٍ تشغيل mpv…' : 'Starting mpv…';
+  String get nativePlaybackFailed => isArabic
+      ? 'تعذّر على mpv تشغيل هذه القناة.'
+      : 'mpv could not play this channel.';
+  String get nativePlaybackClosed =>
+      isArabic ? 'تم إغلاق نافذة mpv.' : 'The mpv window was closed.';
+  String get nativePlaybackEnded =>
+      isArabic ? 'انتهى التشغيل.' : 'Playback finished.';
+  String get nativePlaybackBuffering =>
+      isArabic ? 'جارٍ التخزين المؤقت…' : 'Buffering…';
+  String get playAgain => isArabic ? 'إعادة التشغيل' : 'Play again';
+  String get useBuiltInPlayer => isArabic
+      ? 'استخدام المشغّل المدمج'
+      : 'Use the built-in player';
+
   String get channelGuide => isArabic ? 'دليل القناة' : 'Channel guide';
   String get watchLive => isArabic ? 'مشاهدة مباشرة' : 'Watch live';
   String get programmeGuide =>

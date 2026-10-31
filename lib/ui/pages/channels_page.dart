@@ -6,7 +6,7 @@ import '../../core/theme.dart';
 import '../../data/app_state.dart';
 import '../../data/models.dart';
 import '../../l10n/strings.dart';
-import '../player_page.dart';
+import '../player_launcher.dart';
 import '../widgets/channel_logo.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/error_banner.dart';
@@ -34,11 +34,7 @@ class _ChannelsPageState extends State<ChannelsPage> {
   }
 
   void _openPlayer(Channel channel) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => PlayerPage(channel: channel),
-      ),
-    );
+    openChannelPlayer(context, channel);
   }
 
   void _openGuide(Channel channel) {

@@ -32,6 +32,13 @@ All notable changes to Mojac are documented here. The format follows
   bzip2), while host GTK/system libraries (including librsvg) are never
   shadowed.
 - Bundled Noto Sans Arabic font and GPL-3.0-or-later licensing.
+- Native mpv playback on Linux desktops. Channels open in the system mpv's
+  own window, so video is decoded on the GPU, fullscreen is real instead of
+  filling the app window, and mpv's usual controls work (scroll-wheel volume,
+  keyboard shortcuts, on-screen controller). The Mojac page stays open as a
+  remote control with pause, mute, volume and fullscreen, plus the channel's
+  now/next information. A setting switches back to the built-in player, which
+  also remains the fallback when no `mpv` binary is installed.
 
 ### Fixed
 
@@ -62,5 +69,11 @@ All notable changes to Mojac are documented here. The format follows
   refreshes, and the disk cache prunes far less often.
 - The XMLTV file field suggests a `.xml` example instead of the playlist's
   `.m3u` one.
+- Very short guide programmes no longer look like missing guide data.
+  ErsatzTV's movie channels air five to eight minute programmes, which are
+  20-32 px wide at the default zoom (below the label threshold) and were drawn
+  as nothing at all. They now render as tinted blocks, including the live
+  accent, without text or artwork, so the whole row visibly has coverage while
+  still avoiding one artwork request per sliver.
 
 [0.1.0]: https://github.com/mmbesar/Mojac/releases/tag/v0.1.0

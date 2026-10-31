@@ -251,6 +251,7 @@ class AppSettings {
     required this.accent,
     required this.language,
     required this.use24HourTime,
+    this.nativePlayer = true,
     this.activeSourceId,
   });
 
@@ -265,6 +266,12 @@ class AppSettings {
   final ThemeAccent accent;
   final AppLanguage language;
   final bool use24HourTime;
+
+  /// Desktop only: play with the system mpv instead of media_kit's embedded
+  /// engine. It is the default because the embedded Linux video output only
+  /// has a software texture, while a real mpv decodes with the GPU and goes
+  /// properly fullscreen.
+  final bool nativePlayer;
   final String? activeSourceId;
 
   AppSettings copyWith({
@@ -272,6 +279,7 @@ class AppSettings {
     ThemeAccent? accent,
     AppLanguage? language,
     bool? use24HourTime,
+    bool? nativePlayer,
     Object? activeSourceId = _unset,
   }) {
     return AppSettings(
@@ -279,6 +287,7 @@ class AppSettings {
       accent: accent ?? this.accent,
       language: language ?? this.language,
       use24HourTime: use24HourTime ?? this.use24HourTime,
+      nativePlayer: nativePlayer ?? this.nativePlayer,
       activeSourceId: identical(activeSourceId, _unset)
           ? this.activeSourceId
           : activeSourceId as String?,
@@ -290,6 +299,7 @@ class AppSettings {
         'accent': accent.name,
         'language': language.name,
         'use24HourTime': use24HourTime,
+        'nativePlayer': nativePlayer,
         'activeSourceId': activeSourceId,
       };
 
@@ -311,6 +321,7 @@ class AppSettings {
         AppLanguage.system,
       ),
       use24HourTime: json['use24HourTime'] as bool? ?? false,
+      nativePlayer: json['nativePlayer'] as bool? ?? true,
       activeSourceId: json['activeSourceId'] as String?,
     );
   }

@@ -231,6 +231,10 @@ class AppState extends ChangeNotifier {
     return updateSettings(_settings.copyWith(use24HourTime: value));
   }
 
+  Future<void> setNativePlayer(bool value) {
+    return updateSettings(_settings.copyWith(nativePlayer: value));
+  }
+
   Future<SourceContent> probe(SourceConfig source) => _loader.probe(source);
 
   String _messageFor(Object error) {

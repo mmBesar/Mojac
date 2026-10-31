@@ -8,7 +8,7 @@ import '../../core/theme.dart';
 import '../../data/app_state.dart';
 import '../../data/models.dart';
 import '../../l10n/strings.dart';
-import '../player_page.dart';
+import '../player_launcher.dart';
 import '../widgets/channel_logo.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/error_banner.dart';
@@ -215,11 +215,7 @@ class _GuidePageState extends State<GuidePage> {
   }
 
   void _openPlayer(Channel channel) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => PlayerPage(channel: channel),
-      ),
-    );
+    openChannelPlayer(context, channel);
   }
 
   void _openGuide(Channel channel) {
@@ -986,6 +982,29 @@ class _ProgrammeBlock extends StatelessWidget {
                   constraints.maxWidth > 190 &&
                   textScale <= 1.15;
 
+              if (!hasText) {
+                // A sliver cannot fit a label, but it still marks where the
+                // programme sits. Leaving it blank reads as missing guide
+                // data (ErsatzTV airs five-minute programmes, so an entire
+                // channel looked empty at the default zoom). The surrounding
+                // Material already paints the tinted block and the live
+                // accent; return no text and no artwork, because one image
+                // request per short programme would flood the source.
+                return live
+                    ? Align(
+                        alignment: Alignment.center,
+                        child: Container(
+                          width: 5,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: colors.accent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      )
+                    : const SizedBox.expand();
+              }
+
               final title = BidiText(
                 programme.title,
                 maxLines: detailed ? 2 : 1,
@@ -1008,13 +1027,6 @@ class _ProgrammeBlock extends StatelessWidget {
                                 height: 1.2,
                               ),
                     );
-
-              if (!hasText) {
-                // A sliver cannot fit a label, and an ellipsis tile reads as
-                // missing guide data. Leave it empty: a thumbnail here would
-                // add one image request per short programme.
-                return const SizedBox.shrink();
-              }
 
               if (!detailed) {
                 // Even the narrowest readable block carries the sub-title, so

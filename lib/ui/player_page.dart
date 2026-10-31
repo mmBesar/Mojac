@@ -12,6 +12,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../core/bidi.dart';
 import '../core/network_image.dart';
+import '../core/playback.dart';
 import '../core/theme.dart';
 import '../data/app_state.dart';
 import '../data/models.dart';
@@ -53,20 +54,6 @@ class _PlayerPageState extends State<PlayerPage> {
   /// with 720p and follow the stream's own aspect ratio from then on.
   static const int _softwareVideoWidth = 1280;
   static const int _softwareVideoHeight = 720;
-
-  /// media_kit always passes `strict=experimental` to ffmpeg's demuxer. That
-  /// switches on its unfinished `EXT-X-MEDIA` handling, and an HLS master that
-  /// advertises a subtitle rendition (ErsatzTV publishes a `DEFAULT=YES`
-  /// WebVTT one) then makes ffmpeg attach the subtitle playlist to the variant
-  /// and read `.vtt` segments only. No video or audio packet ever arrives, so
-  /// playback buffers forever even though the server is transcoding. Passing
-  /// the same options without the experimental flag makes ffmpeg ignore the
-  /// rendition and keep the video playlist active.
-  static final String _demuxerLavfOptions = <String>[
-    'seg_max_retry=5',
-    'allowed_extensions=ALL',
-    'protocol_whitelist=[${const PlayerConfiguration().protocolWhitelist.join(',')}]',
-  ].join(',');
 
   late final Player _player;
   late final VideoController _controller;
@@ -328,7 +315,7 @@ class _PlayerPageState extends State<PlayerPage> {
       await _setMpvProperty('keep-open', 'yes');
       await _setMpvProperty('network-timeout', '60');
       await _setMpvProperty('tls-verify', allowInsecure ? 'no' : 'yes');
-      await _setMpvProperty('demuxer-lavf-o', _demuxerLavfOptions);
+      await _setMpvProperty('demuxer-lavf-o', kMpvDemuxerLavfOptions);
       await _player.open(
         Media(
           widget.channel.url,
@@ -489,7 +476,7 @@ class _PlayerPageState extends State<PlayerPage> {
                       strings: strings,
                     ),
             );
-            final info = _ChannelInfo(
+            final info = PlayerChannelInfo(
               channel: widget.channel,
               allowInsecure: allowInsecure,
               onRetry: _open,
@@ -859,8 +846,9 @@ class _OverlayButton extends StatelessWidget {
   }
 }
 
-class _ChannelInfo extends StatelessWidget {
-  const _ChannelInfo({
+class PlayerChannelInfo extends StatelessWidget {
+  const PlayerChannelInfo({
+    super.key,
     required this.channel,
     required this.allowInsecure,
     required this.onRetry,

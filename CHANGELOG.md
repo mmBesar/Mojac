@@ -34,11 +34,26 @@ All notable changes to Mojac are documented here. The format follows
 - Bundled Noto Sans Arabic font and GPL-3.0-or-later licensing.
 - Native mpv playback on Linux desktops. Channels open in the system mpv's
   own window, so video is decoded on the GPU, fullscreen is real instead of
-  filling the app window, and mpv's usual controls work (scroll-wheel volume,
-  keyboard shortcuts, on-screen controller). The Mojac page stays open as a
-  remote control with pause, mute, volume and fullscreen, plus the channel's
-  now/next information. A setting switches back to the built-in player, which
-  also remains the fallback when no `mpv` binary is installed.
+  filling the app window, and mpv's usual controls and the user's own mpv
+  configuration apply. Mojac shows no remote control: it stays on the channel
+  list, never holds the stream itself, closes any previous player when another
+  channel starts, and quits mpv when the app exits. Closing the mpv window
+  therefore ends the stream (and its server-side transcode) immediately. A
+  setting switches back to the built-in player, which also remains the
+  fallback when no `mpv` binary is installed.
+
+### Changed
+
+- Channel artwork is larger in both the channel list and the guide. The
+  channel number now rides on the logo corner as a small badge instead of
+  taking a text column, and the guide's channel column is logo-only.
+- Guide rows carry the channel name in a thin strip pinned to the left of the
+  visible timeline. The name no longer competes with the logo for space, stays
+  readable while the timeline scrolls, and does not cover or shift programme
+  text: programme blocks keep their previous size and time alignment.
+- The guide header no longer appends the redundant "12-hour window" label,
+  which was the first thing truncated on narrow screens.
+- The app tagline is now "Stream, Your Wave".
 
 ### Fixed
 

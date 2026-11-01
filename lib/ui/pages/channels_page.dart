@@ -298,33 +298,39 @@ class _ChannelTile extends StatelessWidget {
               Tooltip(
                 message: strings.watchLive,
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                   onTap: onPlay,
                   child: Padding(
                     padding: const EdgeInsets.all(4),
-                    child: ChannelLogo(
-                      channel: channel,
-                      allowInsecure: allowInsecure,
-                      size: 52,
+                    child: SizedBox(
+                      width: 64,
+                      height: 64,
+                      child: Stack(
+                        children: <Widget>[
+                          ChannelLogo(
+                            channel: channel,
+                            allowInsecure: allowInsecure,
+                            size: 64,
+                            radius: 14,
+                          ),
+                          // The number used to sit in its own 32px column,
+                          // which left the artwork looking cramped. It now
+                          // rides on the logo corner instead.
+                          if (channel.number.isNotEmpty)
+                            PositionedDirectional(
+                              start: 2,
+                              bottom: 2,
+                              child: ChannelNumberBadge(
+                                number: channel.displayNumber,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: 32,
-                child: Text(
-                  channel.displayNumber,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: colors.overlay0,
-                    fontFeatures: const <FontFeature>[
-                      FontFeature.tabularFigures(),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,

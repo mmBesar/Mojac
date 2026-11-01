@@ -56,6 +56,41 @@ class ChannelLogo extends StatelessWidget {
   }
 }
 
+/// The channel number as a small pill, drawn over the corner of a logo.
+///
+/// Channels used to spend a whole text column on the number, which made the
+/// artwork noticeably smaller for no real benefit. Overlaying it gives the
+/// logo the full cell and keeps the number discoverable.
+class ChannelNumberBadge extends StatelessWidget {
+  const ChannelNumberBadge({super.key, required this.number});
+
+  final String number;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.mojacColors;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: colors.crust.withValues(alpha: 0.86),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        number,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: colors.text,
+              fontSize: 9.5,
+              height: 1.1,
+              fontWeight: FontWeight.w700,
+              fontFeatures: const <FontFeature>[
+                FontFeature.tabularFigures(),
+              ],
+            ),
+      ),
+    );
+  }
+}
+
 class _Fallback extends StatelessWidget {
   const _Fallback({required this.size, required this.color});
 

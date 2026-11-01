@@ -28,11 +28,9 @@ class MpvClient {
   final Map<int, Completer<Object?>> _pending = <int, Completer<Object?>>{};
   final StreamController<MpvEvent> _events =
       StreamController<MpvEvent>.broadcast();
-  final StreamController<String> _logs = StreamController<String>.broadcast();
   final List<String> _logLines = <String>[];
 
   int _requestId = 0;
-  int _observeId = 0;
   bool _tearingDown = false;
   bool _quitting = false;
 
@@ -40,14 +38,9 @@ class MpvClient {
   /// `property-change`, `shutdown`.
   Stream<MpvEvent> get events => _events.stream;
 
-  /// Diagnostics from mpv's stdout/stderr, for the error panel and for
-  /// `MOJAC_MPV_LOG=1`.
-  Stream<String> get logs => _logs.stream;
-
-  /// The most recent lines, newest last.
+  /// The most recent stdout/stderr lines, newest last. Useful when a stream
+  /// fails before it produces a frame.
   List<String> get logTail => List<String>.unmodifiable(_logLines);
-
-  bool get isRunning => !_tearingDown;
 
   /// Completes with mpv's exit code when the window closes.
   Future<int> get done => _process.exitCode;
@@ -284,9 +277,6 @@ class MpvClient {
       if (_logLines.length > 80) {
         _logLines.removeRange(0, _logLines.length - 80);
       }
-      if (!_logs.isClosed) {
-        _logs.add(text);
-      }
     }
 
     _process.stdout
@@ -388,23 +378,6 @@ class MpvClient {
     );
   }
 
-  Future<Object?> getProperty(String name) {
-    return command(<Object?>['get_property', name]);
-  }
-
-  Future<void> setProperty(String name, Object value) async {
-    await command(<Object?>['set_property', name, value]);
-  }
-
-  /// Watches [name]; changes arrive as `property-change` events.
-  Future<void> observe(String name) async {
-    try {
-      await command(<Object?>['observe_property', ++_observeId, name]);
-    } on MpvCommandException {
-      // Not every property exists in every mpv build; watching is optional.
-    }
-  }
-
   /// Stops playback and waits for the window to close.
   Future<void> quit() async {
     _quitting = true;
@@ -440,9 +413,6 @@ class MpvClient {
     if (!_events.isClosed) {
       unawaited(_events.close());
     }
-    if (!_logs.isClosed) {
-      unawaited(_logs.close());
-    }
     try {
       File(_socketPath).deleteSync();
     } on FileSystemException {
@@ -451,17 +421,13 @@ class MpvClient {
   }
 }
 
-/// One decoded IPC event. `property-change` events expose [property] and
-/// [value]; `end-file` carries `data['reason']`.
+/// One decoded IPC event. `property-change` events expose the property in
+/// `data['name']`; `end-file` carries `data['reason']`.
 class MpvEvent {
   const MpvEvent(this.name, this.data);
 
   final String name;
   final Map<String, dynamic> data;
-
-  String? get property => data['name'] as String?;
-
-  Object? get value => data['data'];
 }
 
 class MpvUnavailableException implements Exception {

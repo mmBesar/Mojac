@@ -17,12 +17,23 @@ import '../widgets/programme_sheet.dart';
 import '../widgets/warnings_panel.dart';
 import 'channel_guide_page.dart';
 
-const double _channelWidth = 126;
-const double _rowHeight = 92;
+const double _channelWidth = 84;
+const double _rowHeight = 110;
 const double _headerHeight = 50;
 const double _minPixelsPerMinute = 4;
 const double _maxPixelsPerMinute = 12;
 const int _windowMinutes = 12 * 60;
+
+/// Each row carries the channel name in a thin strip above its programmes.
+/// The strip is pinned to the left of the visible timeline (it does not scroll
+/// with the schedule), so the name has room to breathe while the logo cell
+/// stays narrow.
+const double _rowLabelHeight = 18;
+
+/// Programme blocks keep their previous 82px height: the extra row height is
+/// spent on the name strip instead of shrinking the programme text.
+const double _programmeTop = _rowLabelHeight + 5;
+const double _programmeHeight = _rowHeight - _programmeTop - 5;
 
 /// Rows are built lazily around the vertical viewport. Keeping a few rows of
 /// overscan above and below avoids blank strips during a fast fling without
@@ -42,6 +53,10 @@ class _GuidePageState extends State<GuidePage> {
   final ScrollController _bodyHorizontal = ScrollController();
   final ScrollController _headerHorizontal = ScrollController();
   final ScrollController _vertical = ScrollController();
+
+  /// Current horizontal offset, exposed to the pinned row labels so they stay
+  /// at the left edge of the visible timeline while it scrolls.
+  final ValueNotifier<double> _horizontalOffset = ValueNotifier<double>(0);
 
   late DateTime _windowStart;
 
@@ -88,6 +103,7 @@ class _GuidePageState extends State<GuidePage> {
     _vertical.removeListener(_syncViewport);
     _headerHorizontal.dispose();
     _vertical.dispose();
+    _horizontalOffset.dispose();
     super.dispose();
   }
 
@@ -97,7 +113,11 @@ class _GuidePageState extends State<GuidePage> {
     if (!_headerHorizontal.hasClients || !_bodyHorizontal.hasClients) {
       return;
     }
-    final target = _bodyHorizontal.offset.clamp(
+    final offset = _bodyHorizontal.offset;
+    if (_horizontalOffset.value != offset) {
+      _horizontalOffset.value = offset;
+    }
+    final target = offset.clamp(
       0.0,
       _headerHorizontal.position.maxScrollExtent,
     );
@@ -333,7 +353,7 @@ class _GuidePageState extends State<GuidePage> {
                       )} – ${strings.formatTime(
                         _windowEnd,
                         use24HourTime: state.settings.use24HourTime,
-                      )} · ${strings.twelveHourWindow}',
+                      )}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -377,23 +397,10 @@ class _GuidePageState extends State<GuidePage> {
                 child: Row(
                   children: <Widget>[
                     _CornerCell(
-                      child: Row(
-                        children: <Widget>[
-                          Icon(
-                            Icons.tv_rounded,
-                            size: 16,
-                            color: context.mojacColors.overlay0,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            strings.channel,
-                            style:
-                                Theme.of(context).textTheme.labelMedium?.copyWith(
-                                      color: context.mojacColors.subtext0,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                          ),
-                        ],
+                      child: Icon(
+                        Icons.tv_rounded,
+                        size: 18,
+                        color: context.mojacColors.overlay0,
                       ),
                     ),
                     Expanded(
@@ -489,7 +496,11 @@ class _GuidePageState extends State<GuidePage> {
                                           even: index.isEven,
                                           visibleStart: _visibleStart - 600,
                                           visibleEnd: _visibleEnd + 600,
+                                          horizontalOffset: _horizontalOffset,
                                           onWatch: () => _openPlayer(
+                                            channels[index],
+                                          ),
+                                          onGuide: () => _openGuide(
                                             channels[index],
                                           ),
                                         ),
@@ -600,7 +611,7 @@ class _CornerCell extends StatelessWidget {
       width: _channelWidth,
       height: _headerHeight,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      alignment: AlignmentDirectional.centerStart,
+      alignment: AlignmentDirectional.center,
       decoration: BoxDecoration(
         color: context.mojacColors.mantle,
         border: BorderDirectional(
@@ -735,8 +746,6 @@ class _ChannelCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.mojacColors;
-    final strings = context.strings;
-    final rtl = Directionality.of(context) == TextDirection.rtl;
     return Container(
       height: _rowHeight,
       decoration: BoxDecoration(
@@ -746,71 +755,40 @@ class _ChannelCell extends StatelessWidget {
           end: BorderSide(color: colors.surface1),
         ),
       ),
-      child: Row(
-        children: <Widget>[
-          Tooltip(
-            message: strings.watchLive,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: onPlay,
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: ChannelLogo(
-                  channel: channel,
-                  allowInsecure: allowInsecure,
-                  size: 40,
-                  radius: 9,
-                ),
+      alignment: Alignment.center,
+      // The cell is logo-only now: the channel name lives in the timeline
+      // strip, so the artwork gets the whole column. Tap starts playback and
+      // long-press opens the channel's own schedule.
+      child: Tooltip(
+        message: channel.name,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onPlay,
+          onLongPress: onGuide,
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: SizedBox(
+              width: 64,
+              height: 64,
+              child: Stack(
+                children: <Widget>[
+                  ChannelLogo(
+                    channel: channel,
+                    allowInsecure: allowInsecure,
+                    size: 64,
+                    radius: 14,
+                  ),
+                  if (channel.number.isNotEmpty)
+                    PositionedDirectional(
+                      start: 2,
+                      bottom: 2,
+                      child: ChannelNumberBadge(number: channel.displayNumber),
+                    ),
+                ],
               ),
             ),
           ),
-          Expanded(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: onGuide,
-              child: Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(2, 6, 6, 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Row(
-                      children: <Widget>[
-                        Text(
-                          channel.displayNumber,
-                          style:
-                              Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: colors.overlay0,
-                                  ),
-                        ),
-                        const SizedBox(width: 3),
-                        Icon(
-                          rtl
-                              ? Icons.chevron_left_rounded
-                              : Icons.chevron_right_rounded,
-                          size: 14,
-                          color: colors.overlay0,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    BidiText(
-                      channel.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colors.text,
-                            fontWeight: FontWeight.w600,
-                            height: 1.2,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -829,7 +807,9 @@ class _GuideRow extends StatelessWidget {
     required this.even,
     required this.visibleStart,
     required this.visibleEnd,
+    required this.horizontalOffset,
     required this.onWatch,
+    required this.onGuide,
   });
 
   final Channel channel;
@@ -843,7 +823,9 @@ class _GuideRow extends StatelessWidget {
   final bool even;
   final double visibleStart;
   final double visibleEnd;
+  final ValueListenable<double> horizontalOffset;
   final VoidCallback onWatch;
+  final VoidCallback onGuide;
 
   @override
   Widget build(BuildContext context) {
@@ -863,7 +845,7 @@ class _GuideRow extends StatelessWidget {
           if (programmes.isEmpty)
             PositionedDirectional(
               start: 10,
-              top: 0,
+              top: _programmeTop,
               bottom: 0,
               child: Center(
                 child: Text(
@@ -877,8 +859,85 @@ class _GuideRow extends StatelessWidget {
             ),
           for (final programme in programmes)
             _positionedBlock(context, programme),
+          _pinnedLabel(context),
         ],
       ),
+    );
+  }
+
+  /// The channel name, pinned to the left of the visible timeline so it stays
+  /// readable while the schedule scrolls horizontally. It lives in the strip
+  /// above the programme blocks, so it never covers programme text or shifts
+  /// the timeline alignment.
+  Widget _pinnedLabel(BuildContext context) {
+    final colors = context.mojacColors;
+    final theme = Theme.of(context);
+    return ValueListenableBuilder<double>(
+      valueListenable: horizontalOffset,
+      builder: (context, offset, _) {
+        return Positioned(
+          left: offset + 4,
+          top: 1,
+          height: _rowLabelHeight - 2,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 190),
+            child: MediaQuery.withClampedTextScaling(
+              // The name strip has a fixed height so the programme grid keeps
+              // its rhythm; very large accessibility text scales must not
+              // overflow it.
+              maxScaleFactor: 1.1,
+              child: Material(
+                color: colors.mantle,
+                borderRadius: BorderRadius.circular(5),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: onGuide,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: colors.surface1),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        if (channel.number.isNotEmpty) ...<Widget>[
+                          Text(
+                            channel.displayNumber,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: colors.overlay0,
+                              fontSize: 9,
+                              height: 1.1,
+                              fontFeatures: const <FontFeature>[
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Flexible(
+                          child: BidiText(
+                            channel.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: colors.subtext1,
+                              fontSize: 10,
+                              height: 1.1,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -902,9 +961,9 @@ class _GuideRow extends StatelessWidget {
     final nearViewport = left + width >= visibleStart && left <= visibleEnd;
     return Positioned(
       left: left,
-      top: 5,
+      top: _programmeTop,
       width: width,
-      height: _rowHeight - 10,
+      height: _programmeHeight,
       child: _ProgrammeBlock(
         programme: programme,
         live: live,

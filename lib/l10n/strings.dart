@@ -25,9 +25,7 @@ class AppStrings {
   bool get isArabic => locale.languageCode == 'ar';
 
   String get appName => 'Mojac';
-  String get appTagline => isArabic
-      ? 'مشغّل IPTV ثنائي الاتجاه مع دليل برامج لاثنتي عشرة ساعة'
-      : 'A bidirectional IPTV client with a 12-hour guide';
+  String get appTagline => isArabic ? 'بثّك على موجتك' : 'Stream, Your Wave';
 
   String get channels => isArabic ? 'القنوات' : 'Channels';
   String get guide => isArabic ? 'الدليل' : 'Guide';
@@ -78,8 +76,6 @@ class AppStrings {
   String get guideNow => isArabic ? 'الآن' : 'Now';
   String get timelineZoom =>
       isArabic ? 'تكبير الجدول الزمني' : 'Timeline zoom';
-  String get twelveHourWindow =>
-      isArabic ? 'نافذة 12 ساعة' : '12-hour window';
 
   String get retry => isArabic ? 'إعادة المحاولة' : 'Retry';
   String get refresh => isArabic ? 'تحديث' : 'Refresh';
@@ -234,7 +230,6 @@ class AppStrings {
   String get volume => isArabic ? 'مستوى الصوت' : 'Volume';
   String get brightness => isArabic ? 'السطوع' : 'Brightness';
   String get exitFullScreen => isArabic ? 'إنهاء ملء الشاشة' : 'Exit full screen';
-  String get closePlayer => isArabic ? 'إغلاق المشغّل' : 'Close player';
   String get streamUnavailable =>
       isArabic ? 'البث غير متاح' : 'Stream unavailable';
 
@@ -243,31 +238,11 @@ class AppStrings {
       ? 'استخدام مشغّل mpv النظامي'
       : 'Use the system mpv player';
   String get nativePlayerHelp => isArabic
-      ? 'يسلّم التشغيل على سطح المكتب القناة إلى مشغّل mpv النظامي، فيفكّ الترميز عبر كرت الرسوميات ويوفّر ملء شاشة حقيقياً وأدوات تحكم أصلية. أوقف هذا الخيار لاستخدام المشغّل المدمج.'
-      : 'Desktop playback hands the channel to the system mpv, which decodes with the GPU and provides real fullscreen and native controls. Turn this off to use the built-in player instead.';
-  String get nativePlaybackTitle =>
-      isArabic ? 'التشغيل عبر mpv' : 'Playing in mpv';
-  String get nativePlaybackBody => isArabic
-      ? 'الفيديو في نافذة mpv مستقلة، بفكّ ترميز عتادي وملء شاشة حقيقي. هذه الصفحة هي جهاز التحكم.'
-      : 'The video plays in its own mpv window with hardware decoding and real fullscreen. This page is the remote control.';
-  String get nativePlaybackShortcuts => isArabic
-      ? 'داخل نافذة mpv: عجلة الفأرة تغيّر الصوت، وf لملء الشاشة، وm لكتم الصوت، والمسافة للإيقاف المؤقت.'
-      : 'In the mpv window: the scroll wheel changes volume, f toggles fullscreen, m mutes, and space pauses.';
-  String get nativePlaybackStarting =>
-      isArabic ? 'جارٍ تشغيل mpv…' : 'Starting mpv…';
+      ? 'يسلّم التشغيل على سطح المكتب القناة إلى مشغّل mpv النظامي، فيفكّ الترميز عبر كرت الرسوميات ويوفّر ملء شاشة حقيقياً وأدوات تحكم أصلية. لا تعرض Mojac أي أدوات تحكم؛ أغلق نافذة mpv لإنهاء البث. أوقف هذا الخيار لاستخدام المشغّل المدمج.'
+      : 'Desktop playback hands the channel to the system mpv, which decodes with the GPU, provides real fullscreen and uses your own mpv configuration and controls. Mojac shows no controls: closing the mpv window ends the stream. Turn this off to use the built-in player instead.';
   String get nativePlaybackFailed => isArabic
       ? 'تعذّر على mpv تشغيل هذه القناة.'
       : 'mpv could not play this channel.';
-  String get nativePlaybackClosed =>
-      isArabic ? 'تم إغلاق نافذة mpv.' : 'The mpv window was closed.';
-  String get nativePlaybackEnded =>
-      isArabic ? 'انتهى التشغيل.' : 'Playback finished.';
-  String get nativePlaybackBuffering =>
-      isArabic ? 'جارٍ التخزين المؤقت…' : 'Buffering…';
-  String get playAgain => isArabic ? 'إعادة التشغيل' : 'Play again';
-  String get useBuiltInPlayer => isArabic
-      ? 'استخدام المشغّل المدمج'
-      : 'Use the built-in player';
 
   String get channelGuide => isArabic ? 'دليل القناة' : 'Channel guide';
   String get watchLive => isArabic ? 'مشاهدة مباشرة' : 'Watch live';

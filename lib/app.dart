@@ -1,6 +1,7 @@
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
@@ -9,6 +10,7 @@ import 'core/theme.dart';
 import 'data/app_state.dart';
 import 'data/models.dart';
 import 'l10n/strings.dart';
+import 'player/desktop_playback.dart';
 import 'ui/app_shell.dart';
 
 class MojacScrollBehavior extends MaterialScrollBehavior {
@@ -23,8 +25,35 @@ class MojacScrollBehavior extends MaterialScrollBehavior {
       };
 }
 
-class MojacApp extends StatelessWidget {
+class MojacApp extends StatefulWidget {
   const MojacApp({super.key});
+
+  @override
+  State<MojacApp> createState() => _MojacAppState();
+}
+
+class _MojacAppState extends State<MojacApp> {
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(onExitRequested: _onExitRequested);
+  }
+
+  /// Quit the system mpv when Mojac closes. Otherwise mpv keeps the channel
+  /// open in an orphan window and the server keeps transcoding for a viewer
+  /// that is gone.
+  Future<AppExitResponse> _onExitRequested() async {
+    await DesktopPlayback.instance.stop();
+    return AppExitResponse.exit;
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

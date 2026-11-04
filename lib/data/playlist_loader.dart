@@ -51,13 +51,11 @@ class PlaylistLoader {
   PlaylistLoader({
     MojacFetcher? fetcher,
     Directory? cacheDirectory,
-    this.xmltvParser = const XmltvParser(),
     this.cacheMaxAge = const Duration(days: 30),
   })  : _fetcher = fetcher ?? MojacFetcher(),
         _cacheDirectory = cacheDirectory;
 
   final MojacFetcher _fetcher;
-  final XmltvParser xmltvParser;
 
   /// Cached data older than this is ignored.
   final Duration cacheMaxAge;
@@ -68,12 +66,20 @@ class PlaylistLoader {
     SourceConfig source, {
     bool persist = true,
     bool useCache = true,
+    int guideHours = 12,
   }) async {
     final m3uLocation = source.m3u.value.trim();
     if (m3uLocation.isEmpty) {
       throw SourceLoadException('No playlist location is configured.');
     }
 
+    // Keep as much upcoming data as the guide can display, plus a margin so a
+    // window that starts later in the day still fills up.
+    final xmltvParser = XmltvParser(
+      // Keep a full extra day beyond the selected window so a guide that rolls
+      // overnight still has programming when the user scrolls forward.
+      futureWindow: Duration(hours: guideHours.clamp(12, 168) + 12),
+    );
     final cache = useCache ? await _readCache(source) : null;
     final m3uBase = _baseUri(source.m3u);
     final warnings = <LoadWarning>{};
@@ -163,8 +169,8 @@ class PlaylistLoader {
 
   /// Fetches and parses a candidate source without touching or trusting the
   /// cache. Used by the source editor's "Check" button.
-  Future<SourceContent> probe(SourceConfig source) =>
-      load(source, persist: false, useCache: false);
+  Future<SourceContent> probe(SourceConfig source, {int guideHours = 12}) =>
+      load(source, persist: false, useCache: false, guideHours: guideHours);
 
   String? _resolveEpgLocation(
     SourceConfig source,
@@ -267,7 +273,7 @@ class PlaylistLoader {
         return null;
       }
       final map = decoded.cast<String, dynamic>();
-      if (map['version'] != 1 || map['signature'] != _signature(source)) {
+      if (map['version'] != 2 || map['signature'] != _signature(source)) {
         return null;
       }
       final savedAt = DateTime.tryParse(map['savedAt'] as String? ?? '');
@@ -289,7 +295,7 @@ class PlaylistLoader {
     }
     try {
       final map = <String, dynamic>{
-        'version': 1,
+        'version': 2,
         'signature': _signature(source),
         'savedAt': content.loadedAt.toIso8601String(),
         'xmltvLocation': content.xmltvLocation,
@@ -355,8 +361,17 @@ class PlaylistLoader {
       'subTitle': programme.subTitle,
       'description': programme.description,
       'categories': programme.categories,
-      'iconUrl': programme.iconUrl,
+      'images': programme.images,
       'episode': programme.episode,
+      'season': programme.season,
+      'episodeNumber': programme.episodeNumber,
+      'credits': programme.credits.toJson(),
+      'rating': programme.rating,
+      'ratingSystem': programme.ratingSystem,
+      'keywords': programme.keywords,
+      'year': programme.year,
+      'previouslyShown': programme.previouslyShown,
+      'new': programme.newEpisode,
     };
   }
 
@@ -367,6 +382,19 @@ class PlaylistLoader {
     if (start == null || stop == null || title.isEmpty) {
       return null;
     }
+    final rawImages = (map['images'] as List?)
+            ?.whereType<String>()
+            .toList(growable: false) ??
+        const <String>[];
+    // Version-1 caches stored a single iconUrl; keep reading it so an old
+    // cache does not lose its artwork if the version bump is ever relaxed.
+    final legacyIcon = map['iconUrl'] as String?;
+    final images = rawImages.isNotEmpty
+        ? rawImages
+        : legacyIcon == null
+            ? const <String>[]
+            : <String>[legacyIcon];
+    final creditsJson = map['credits'];
     return Programme(
       channelId: map['channelId'] as String? ?? '',
       start: start,
@@ -378,8 +406,22 @@ class PlaylistLoader {
               ?.whereType<String>()
               .toList(growable: false) ??
           const <String>[],
-      iconUrl: map['iconUrl'] as String?,
+      images: images,
       episode: map['episode'] as String?,
+      season: (map['season'] as num?)?.toInt(),
+      episodeNumber: (map['episodeNumber'] as num?)?.toInt(),
+      credits: creditsJson is Map
+          ? ProgrammeCredits.fromJson(creditsJson.cast<String, dynamic>())
+          : const ProgrammeCredits(),
+      rating: map['rating'] as String?,
+      ratingSystem: map['ratingSystem'] as String?,
+      keywords: (map['keywords'] as List?)
+              ?.whereType<String>()
+              .toList(growable: false) ??
+          const <String>[],
+      year: (map['year'] as num?)?.toInt(),
+      previouslyShown: map['previouslyShown'] as bool? ?? false,
+      newEpisode: map['new'] as bool? ?? false,
     );
   }
 }

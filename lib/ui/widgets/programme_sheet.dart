@@ -98,7 +98,7 @@ class _ProgrammeSheet extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       BidiText(
-                        programme.title,
+                        programme.displayTitle,
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w700,
                           height: 1.25,
@@ -117,8 +117,7 @@ class _ProgrammeSheet extends StatelessWidget {
                 ],
               ],
             ),
-            if (programme.iconUrl != null &&
-                programme.iconUrl!.trim().isNotEmpty) ...<Widget>[
+            if (programme.images.isNotEmpty) ...<Widget>[
               const SizedBox(height: 16),
               ProgrammePoster(
                 programme: programme,
@@ -161,6 +160,29 @@ class _ProgrammeSheet extends StatelessWidget {
                     icon: Icons.numbers_rounded,
                     label: programme.episode!,
                   ),
+                if (programme.year != null)
+                  _Meta(
+                    icon: Icons.event_rounded,
+                    label: strings.yearLabel(programme.year!),
+                  ),
+                if (programme.rating != null)
+                  _Meta(
+                    icon: Icons.shield_outlined,
+                    label: programme.ratingSystem == null
+                        ? '${strings.ratedLabel}: ${programme.rating}'
+                        : '${strings.ratedLabel}: ${programme.rating} '
+                            '(${programme.ratingSystem})',
+                  ),
+                if (programme.newEpisode)
+                  _Meta(
+                    icon: Icons.fiber_new_rounded,
+                    label: strings.newEpisode,
+                  ),
+                if (programme.previouslyShown)
+                  _Meta(
+                    icon: Icons.replay_rounded,
+                    label: strings.previouslyShown,
+                  ),
               ],
             ),
             if (programme.categories.isNotEmpty) ...<Widget>[
@@ -183,6 +205,48 @@ class _ProgrammeSheet extends StatelessWidget {
                         category,
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: colors.subtext1,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+            if (!programme.credits.isEmpty) ...<Widget>[
+              const SizedBox(height: 18),
+              _CreditsSection(
+                credits: programme.credits,
+                strings: strings,
+              ),
+            ],
+            if (programme.keywords.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 16),
+              Text(
+                strings.keywords,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: colors.overlay0,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: <Widget>[
+                  for (final keyword in programme.keywords)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colors.surface0,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: colors.surface1),
+                      ),
+                      child: BidiText(
+                        keyword,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colors.subtext0,
                         ),
                       ),
                     ),
@@ -248,6 +312,77 @@ class _Badge extends StatelessWidget {
               letterSpacing: 0.6,
             ),
       ),
+    );
+  }
+}
+
+class _CreditsSection extends StatelessWidget {
+  const _CreditsSection({required this.credits, required this.strings});
+
+  final ProgrammeCredits credits;
+  final AppStrings strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = context.mojacColors;
+    final rows = <Widget>[];
+    void add(String label, List<String> people) {
+      if (people.isEmpty) {
+        return;
+      }
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              SizedBox(
+                width: 92,
+                child: Text(
+                  label,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.overlay0,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: BidiText(
+                  people.join(' · '),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.subtext1,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    add(strings.directedBy, credits.directors);
+    add(strings.writtenBy, credits.writers);
+    add(strings.producedBy, credits.producers);
+    add(strings.musicBy, credits.composers);
+    add(strings.presentedBy, credits.presenters);
+    add(strings.starring, credits.actors);
+    add(strings.guests, credits.guests);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          strings.credits,
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: colors.overlay0,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...rows,
+      ],
     );
   }
 }

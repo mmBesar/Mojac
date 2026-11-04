@@ -87,6 +87,59 @@ def patch_android_manifest() -> None:
     print("  patched AndroidManifest.xml")
 
 
+# Release signing is optional: CI writes android/key.properties from secrets,
+# local builds without one keep Flutter's debug signing. The marker keeps this
+# patch idempotent when bootstrap runs over an existing checkout.
+SIGNING_MARKER = "Mojac release signing"
+
+KTS_SIGNING_PROPERTIES = """// Mojac release signing: populated by CI from repository secrets.
+val mojacKeystoreProperties = java.util.Properties()
+val mojacKeystoreFile = rootProject.file("key.properties")
+if (mojacKeystoreFile.exists()) {
+    mojacKeystoreProperties.load(java.io.FileInputStream(mojacKeystoreFile))
+}
+
+"""
+
+KTS_SIGNING_CONFIGS = """android {
+    // Mojac release signing.
+    signingConfigs {
+        create("release") {
+            if (mojacKeystoreFile.exists()) {
+                storeFile = file(mojacKeystoreProperties["storeFile"] as String)
+                storePassword =
+                    mojacKeystoreProperties["storePassword"] as String
+                keyAlias = mojacKeystoreProperties["keyAlias"] as String
+                keyPassword = mojacKeystoreProperties["keyPassword"] as String
+            }
+        }
+    }
+"""
+
+GROOVY_SIGNING_PROPERTIES = """// Mojac release signing: populated by CI from repository secrets.
+def mojacKeystoreProperties = new Properties()
+def mojacKeystoreFile = rootProject.file('key.properties')
+if (mojacKeystoreFile.exists()) {
+    mojacKeystoreProperties.load(new FileInputStream(mojacKeystoreFile))
+}
+
+"""
+
+GROOVY_SIGNING_CONFIGS = """android {
+    // Mojac release signing.
+    signingConfigs {
+        release {
+            if (mojacKeystoreFile.exists()) {
+                storeFile file(mojacKeystoreProperties['storeFile'])
+                storePassword mojacKeystoreProperties['storePassword']
+                keyAlias mojacKeystoreProperties['keyAlias']
+                keyPassword mojacKeystoreProperties['keyPassword']
+            }
+        }
+    }
+"""
+
+
 def patch_android_gradle() -> None:
     kts = ANDROID / "app" / "build.gradle.kts"
     groovy = ANDROID / "app" / "build.gradle"
@@ -102,6 +155,7 @@ def patch_android_gradle() -> None:
             "minSdk = 24",
             text,
         )
+        text = patch_kts_signing(text)
         write(kts, text)
         print("  patched android/app/build.gradle.kts")
     elif groovy.exists():
@@ -116,8 +170,54 @@ def patch_android_gradle() -> None:
             "minSdkVersion 24",
             text,
         )
+        text = patch_groovy_signing(text)
         write(groovy, text)
         print("  patched android/app/build.gradle")
+
+
+def patch_kts_signing(text: str) -> str:
+    if SIGNING_MARKER in text:
+        return text
+    match = re.search(r"^android\s*\{", text, re.MULTILINE)
+    if not match:
+        print("  android {} block not found; skipping APK signing")
+        return text
+    text = (
+        text[: match.start()]
+        + KTS_SIGNING_PROPERTIES
+        + KTS_SIGNING_CONFIGS
+        + text[match.end() :]
+    )
+    text = re.sub(
+        r'signingConfig\s*=\s*signingConfigs\.getByName\("debug"\)',
+        "signingConfig = if (mojacKeystoreFile.exists()) "
+        'signingConfigs.getByName("release") '
+        'else signingConfigs.getByName("debug")',
+        text,
+    )
+    return text
+
+
+def patch_groovy_signing(text: str) -> str:
+    if SIGNING_MARKER in text:
+        return text
+    match = re.search(r"^android\s*\{", text, re.MULTILINE)
+    if not match:
+        print("  android {} block not found; skipping APK signing")
+        return text
+    text = (
+        text[: match.start()]
+        + GROOVY_SIGNING_PROPERTIES
+        + GROOVY_SIGNING_CONFIGS
+        + text[match.end() :]
+    )
+    text = re.sub(
+        r"signingConfig\s+signingConfigs\.debug",
+        "signingConfig mojacKeystoreFile.exists() ? "
+        "signingConfigs.release : signingConfigs.debug",
+        text,
+    )
+    return text
 
 
 def patch_android_icons() -> None:

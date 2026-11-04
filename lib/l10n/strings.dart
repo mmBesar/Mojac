@@ -249,10 +249,348 @@ class AppStrings {
   String get programmeGuide =>
       isArabic ? 'جدول البرامج' : 'Programme schedule';
 
+  String get favorites => isArabic ? 'المفضلة' : 'Favorites';
+  String get search => isArabic ? 'بحث' : 'Search';
+  String get searchHint => isArabic
+      ? 'ابحث عن قناة أو برنامج أو مجموعة…'
+      : 'Search channels, programmes, groups…';
+  String get searchPrompt => isArabic
+      ? 'اكتب اسم قناة أو برنامجًا أو مجموعة. تطابق العناوين والوصف والحلقات.'
+      : 'Type a channel, programme or group. Titles, descriptions and episodes all match.';
+  String get searchNoResults => isArabic
+      ? 'لا توجد نتائج مطابقة.'
+      : 'No matching results.';
+  String get resultChannels => isArabic ? 'القنوات' : 'Channels';
+  String get resultProgrammes => isArabic ? 'البرامج' : 'Programmes';
+  String get searchGroups => isArabic ? 'المجموعات' : 'Groups';
+  String searchResultCount(int count) =>
+      isArabic ? '$count نتيجة' : '$count result${count == 1 ? '' : 's'}';
+  String get favoritesEmptyTitle =>
+      isArabic ? 'لا توجد قنوات مفضلة بعد' : 'No favorites yet';
+  String get favoritesEmptyBody => isArabic
+      ? 'اضغط النجمة بجانب أي قناة لتظهر هنا دائمًا.'
+      : 'Tap the star beside a channel and it will always be waiting here.';
+  String get addFavorite => isArabic ? 'إضافة إلى المفضلة' : 'Add to favorites';
+  String get removeFavorite =>
+      isArabic ? 'إزالة من المفضلة' : 'Remove from favorites';
+  String get addedToFavorites =>
+      isArabic ? 'أُضيفت إلى المفضلة.' : 'Added to favorites.';
+  String get removedFromFavorites =>
+      isArabic ? 'أُزيلت من المفضلة.' : 'Removed from favorites.';
+  String favoriteCount(int count) => isArabic
+      ? '$count قناة مفضلة'
+      : count == 1
+          ? '1 favorite'
+          : '$count favorites';
+  String get noGroupChannels => isArabic
+      ? 'لا توجد قنوات في هذه المجموعة.'
+      : 'No channels in this group.';
+
+  String get switchSource => isArabic ? 'تبديل المصدر' : 'Switch source';
+  String get chooseSource => isArabic ? 'اختر مصدرًا' : 'Choose a source';
+  String get manageSources =>
+      isArabic ? 'إدارة المصادر' : 'Manage sources';
+  String get sourcesHelp => isArabic
+      ? 'احفظ عدة مصادر وبدّل بينها بسرعة من الشريط العلوي.'
+      : 'Keep several sources and switch between them from the top bar.';
+  String get sourceType => isArabic ? 'نوع المصدر' : 'Source type';
+  String get sourceTypeHelp => isArabic
+      ? 'اختر Tunarr أو ErsatzTV وأدخل عنوان الخادم فقط؛ سيجلب Mojac قائمة التشغيل والدليل تلقائيًا.'
+      : 'Pick Tunarr or ErsatzTV and enter just the server address; Mojac finds the playlist and guide automatically.';
+  String get serverAddress =>
+      isArabic ? 'عنوان الخادم' : 'Server address';
+  String get serverAddressHint => 'https://tunarr.hs.lan';
+  String get providerIptvHelp => isArabic
+      ? 'أدخل رابط M3U ورابط XMLTV بنفسك.'
+      : 'Enter the M3U and XMLTV URLs yourself.';
+  String get providerTunarrHelp => isArabic
+      ? 'يُستخدم /api/channels.m3u و/api/xmltv.xml تلقائيًا.'
+      : 'Uses /api/channels.m3u and /api/xmltv.xml automatically.';
+  String get providerErsatzHelp => isArabic
+      ? 'يُستخدم /iptv/channels.m3u و/iptv/xmltv.xml تلقائيًا.'
+      : 'Uses /iptv/channels.m3u and /iptv/xmltv.xml automatically.';
+  String get serverAddressRequired => isArabic
+      ? 'أدخل عنوان خادم Tunarr أو ErsatzTV.'
+      : 'Enter the Tunarr or ErsatzTV server address.';
+  String providerDetected(String name) => isArabic
+      ? 'تم التعرف على $name وتعبئة الروابط.'
+      : 'Detected $name and filled in the URLs.';
+
+  String get guideWindow => isArabic ? 'مدة الدليل' : 'Guide window';
+  String get guideWindowHelp => isArabic
+      ? 'كم ساعة يعرضها الجدول الزمني، بدءًا من الآن. المزيد يعني تمريرًا أطول وتحميلًا أكبر للبرامج.'
+      : 'How many hours the timeline shows from now. Longer windows scroll further and retain more programmes.';
+  String guideHoursLabel(int hours) =>
+      isArabic ? '$hours ساعة' : hours == 1 ? '1 hour' : '$hours hours';
+
+  String get autoRefresh =>
+      isArabic ? 'التحديث التلقائي' : 'Auto refresh';
+  String get autoRefreshHelp => isArabic
+      ? 'يعيد تحميل قائمة التشغيل والدليل في الخلفية حسب الجدول المحدد.'
+      : 'Reloads the playlist and guide in the background on the schedule you choose.';
+  String get refreshOff => isArabic ? 'إيقاف' : 'Off';
+  String refreshEvery(int minutes) {
+    if (minutes < 60) {
+      return isArabic ? 'كل $minutes دقيقة' : 'Every $minutes min';
+    }
+    final hours = minutes ~/ 60;
+    return isArabic
+        ? 'كل $hours ساعة'
+        : hours == 1
+            ? 'Every hour'
+            : 'Every $hours hours';
+  }
+
+  String get startingStream =>
+      isArabic ? 'جارٍ بدء البث…' : 'Starting stream…';
+  String get streamStartTimeout => isArabic
+      ? 'لم يبدأ البث خلال الوقت المتوقع. قد يكون المصدر مشغولًا أو الرابط غير متاح.'
+      : 'The stream did not start in time. The source may be busy or the link may be unavailable.';
+  String get audioTracks => isArabic ? 'المسارات الصوتية' : 'Audio tracks';
+  String get subtitleTracks =>
+      isArabic ? 'الترجمة والوسوم' : 'Subtitles';
+  String get subtitlesOff => isArabic ? 'إيقاف الترجمة' : 'Subtitles off';
+  String get tracks => isArabic ? 'المسارات' : 'Tracks';
+  String get autoTrack => isArabic ? 'تلقائي' : 'Auto';
+  String get noTrack => isArabic ? 'بدون' : 'None';
+  String trackNumber(int number) =>
+      isArabic ? 'مسار $number' : 'Track $number';
+
+  String get channelBanner => isArabic ? 'شريط القناة' : 'Channel banner';
+  String get channelBannerHelp => isArabic
+      ? 'يعرض اسم القناة وما يُعرض الآن وما يليه لثوانٍ عند فتح أي قناة.'
+      : 'Shows the channel name, what is on now and what is next for a few seconds whenever a channel opens.';
+  String get pinBanner =>
+      isArabic ? 'إبقاء الشريط ظاهرًا' : 'Keep the banner on screen';
+  String get unpinBanner => isArabic ? 'إخفاء الشريط' : 'Hide the banner';
+  String get previousChannel => isArabic ? 'القناة السابقة' : 'Previous channel';
+  String get nextChannel => isArabic ? 'القناة التالية' : 'Next channel';
+  String get browseChannels => isArabic ? 'استعراض القنوات' : 'Browse channels';
+  String get channelBrowserHint => isArabic
+      ? 'اكتب اسم القناة أو رقمها'
+      : 'Type a channel name or number';
+  String get noChannelMatch =>
+      isArabic ? 'لا توجد قناة مطابقة.' : 'No channel matches that search.';
+  String get tunedTo => isArabic ? 'تم الانتقال إلى' : 'Tuned to';
+  String get channelNotFound =>
+      isArabic ? 'لا توجد قناة بهذا الرقم' : 'No channel with that number';
+  String get enterChannelNumber =>
+      isArabic ? 'أدخل رقم القناة' : 'Enter a channel number';
+  String get muted => isArabic ? 'مكتوم' : 'Muted';
+  String get paused => isArabic ? 'متوقف مؤقتًا' : 'Paused';
+  String get playing => isArabic ? 'قيد التشغيل' : 'Playing';
+  String get audioTrackChanged => isArabic ? 'المسار الصوتي' : 'Audio track';
+  String get subtitleChanged => isArabic ? 'الترجمة' : 'Subtitles';
+  String get onlyOneAudio => isArabic
+      ? 'لهذا البث مسار صوتي واحد فقط.'
+      : 'This stream has only one audio track.';
+  String get noSubtitleTracks => isArabic
+      ? 'لا توجد مسارات ترجمة في هذا البث.'
+      : 'This stream has no subtitle tracks.';
+  String get trackMemoryHelp => isArabic
+      ? 'يتذكّر Mojac اختيارك للمسارات لكل قناة.'
+      : 'Mojac remembers your track choice for each channel.';
+  String get restoreTrackDefaults => isArabic
+      ? 'استخدام المسارات الافتراضية'
+      : 'Use the default tracks';
+  String get trackDefaultsRestored => isArabic
+      ? 'تمت استعادة المسارات الافتراضية.'
+      : 'Default tracks restored.';
+
+  String get sleepTimer => isArabic ? 'مؤقّت النوم' : 'Sleep timer';
+  String get sleepOff => isArabic ? 'إيقاف' : 'Off';
+  String get sleepEndOfProgramme =>
+      isArabic ? 'نهاية هذا البرنامج' : 'End of this programme';
+  String get sleepTimerFinished =>
+      isArabic ? 'انتهى مؤقّت النوم.' : 'Sleep timer finished.';
+  String sleepTimerSet(int minutes) => isArabic
+      ? 'سيتوقف التشغيل بعد $minutes دقيقة'
+      : 'Sleeping in $minutes min';
+  String sleepIn(int minutes) =>
+      isArabic ? 'النوم بعد $minutes د' : 'Sleep in ${minutes}m';
+
+  String get picture => isArabic ? 'الصورة' : 'Picture';
+  String get aspectRatio =>
+      isArabic ? 'نسبة العرض إلى الارتفاع' : 'Aspect ratio';
+  String get aspectAuto => isArabic ? 'تلقائي (الأصل)' : 'Auto (native)';
+  String get aspectFill => isArabic ? 'ملء الشاشة' : 'Fill screen';
+  String get aspectStretch => isArabic ? 'تمديد' : 'Stretch';
+  String get aspectHelp => isArabic
+      ? '«تلقائي» يعيد نسبة البث الأصلية، و«ملء الشاشة» يقتص الحواف بلا تشويه، و«تمديد» يملأ النافذة حتى لو تغيّرت النسبة. تبقى الخيارات الأخرى مفعّلة حتى تختار تلقائي مجددًا.'
+      : 'Auto restores the stream\'s own ratio, Fill crops the edges without distorting, and Stretch fills the window even if that changes the ratio. The others stay until you pick Auto again.';
+  String get deinterlace => isArabic ? 'إزالة التشابك' : 'Deinterlace';
+  String get deinterlaceAuto => isArabic ? 'تلقائي' : 'Auto';
+  String get deinterlaceOn => isArabic ? 'تشغيل' : 'On';
+  String get deinterlaceOff => isArabic ? 'إيقاف' : 'Off';
+  String get audioDelay => isArabic ? 'تأخير الصوت' : 'Audio delay';
+  String get subtitleDelay => isArabic ? 'تأخير الترجمة' : 'Subtitle delay';
+  String get resetPicture => isArabic ? 'إعادة ضبط الصورة' : 'Reset picture';
+  String get pictureReset => isArabic
+      ? 'تمت إعادة ضبط إعدادات الصورة.'
+      : 'Picture settings reset.';
+
+  String get playbackInfo => isArabic ? 'معلومات التشغيل' : 'Playback info';
+  String get statistics => isArabic ? 'الإحصاءات' : 'Statistics';
+  String get showStatistics => isArabic
+      ? 'عرض إحصاءات التشغيل'
+      : 'Show playback statistics';
+  String get hideStatistics => isArabic
+      ? 'إخفاء إحصاءات التشغيل'
+      : 'Hide playback statistics';
+  String get streamUrl => isArabic ? 'رابط البث' : 'Stream URL';
+  String get redactedUrlNote => isArabic
+      ? 'أُخفيت بيانات الدخول ومعاملات الرابط.'
+      : 'Credentials and query strings are hidden.';
+  String get copyDetails => isArabic ? 'نسخ التفاصيل' : 'Copy details';
+  String get detailsCopied => isArabic ? 'نُسخت التفاصيل.' : 'Details copied.';
+  String get engine => isArabic ? 'المحرّك' : 'Engine';
+  String get builtInEngine => isArabic
+      ? 'المشغّل المدمج (media_kit / libmpv)'
+      : 'Built-in player (media_kit / libmpv)';
+  String get resolution => isArabic ? 'الدقة' : 'Resolution';
+  String get videoCodec => isArabic ? 'ترميز الفيديو' : 'Video codec';
+  String get audioCodec => isArabic ? 'ترميز الصوت' : 'Audio codec';
+  String get frameRate => isArabic ? 'معدل الإطارات' : 'Frame rate';
+  String get bufferLevel => isArabic ? 'المخزن المؤقت' : 'Buffer';
+  String get droppedFrames => isArabic ? 'الإطارات المفقودة' : 'Dropped frames';
+  String get hardwareDecoder =>
+      isArabic ? 'فك الترميز العتادي' : 'Hardware decoder';
+  String get bitrate => isArabic ? 'معدل البت' : 'Bitrate';
+  String get position => isArabic ? 'الموضع' : 'Position';
+  String get waitingForData => isArabic ? 'بانتظار البيانات' : 'Waiting for data';
+
+  String get keyboardShortcuts =>
+      isArabic ? 'اختصارات لوحة المفاتيح' : 'Keyboard shortcuts';
+  String get shortcutsIntro => isArabic
+      ? 'تعمل مع لوحة مفاتيح أو جهاز تحكم.'
+      : 'These work with a hardware keyboard or a TV remote.';
+  String get shortcutPlayPause =>
+      isArabic ? 'تشغيل أو إيقاف مؤقت' : 'Play or pause';
+  String get shortcutFullscreen => isArabic ? 'ملء الشاشة' : 'Full screen';
+  String get shortcutMute => isArabic ? 'كتم الصوت' : 'Mute';
+  String get shortcutVolume =>
+      isArabic ? 'رفع أو خفض الصوت' : 'Volume up or down';
+  String get shortcutChannels =>
+      isArabic ? 'القناة السابقة أو التالية' : 'Previous or next channel';
+  String get shortcutBrowser => isArabic ? 'مستعرض القنوات' : 'Channel browser';
+  String get shortcutTracks =>
+      isArabic ? 'المسارات الصوتية والترجمة' : 'Audio and subtitle tracks';
+  String get shortcutAudio =>
+      isArabic ? 'تبديل المسار الصوتي' : 'Cycle the audio track';
+  String get shortcutSubtitles => isArabic ? 'تبديل الترجمة' : 'Cycle subtitles';
+  String get shortcutPicture =>
+      isArabic ? 'إعدادات الصورة' : 'Picture settings';
+  String get shortcutAspect =>
+      isArabic ? 'تبديل نسبة العرض' : 'Cycle the aspect ratio';
+  String get shortcutDeinterlace =>
+      isArabic ? 'تبديل إزالة التشابك' : 'Cycle deinterlace';
+  String get shortcutBanner =>
+      isArabic ? 'إظهار أو إخفاء الشريط' : 'Show or hide the banner';
+  String get shortcutSleep => isArabic ? 'مؤقّت النوم' : 'Sleep timer';
+  String get shortcutStatistics =>
+      isArabic ? 'إحصاءات التشغيل' : 'Playback statistics';
+  String get shortcutInfo =>
+      isArabic ? 'معلومات التشغيل' : 'Playback info';
+  String get shortcutNumbers =>
+      isArabic ? 'إدخال رقم قناة' : 'Enter a channel number';
+  String get shortcutEscape => isArabic
+      ? 'إغلاق أو الخروج من ملء الشاشة أو الرجوع'
+      : 'Close, leave full screen or go back';
+  String get shortcutHelp =>
+      isArabic ? 'قائمة الاختصارات' : 'This shortcut list';
+
+  String get defaultAudioLanguage =>
+      isArabic ? 'لغة الصوت الافتراضية' : 'Default audio language';
+  String get defaultSubtitles =>
+      isArabic ? 'الترجمة الافتراضية' : 'Default subtitles';
+  String get defaultAudioHelp => isArabic
+      ? 'يُختار المسار المطابق عند فتح القناة، ويُحفظ اختيارك لكل قناة.'
+      : 'The matching track is chosen when a channel opens, and your pick is remembered per channel.';
+  String get defaultSubtitlesHelp => isArabic
+      ? 'اختر «إيقاف الترجمة» لبدء كل قناة دون ترجمة، أو تلقائي لترك القرار للمشغّل.'
+      : 'Choose Subtitles off to start every channel without them, or Automatic to leave it to the player.';
+  String get playerSettingsHelp => isArabic
+      ? 'تُطبَّق هذه الإعدادات على المشغّل المدمج في Android وعندما لا يُستخدم mpv النظامي.'
+      : 'These apply to the built-in player on Android and wherever the system mpv is not used.';
+  String get automatic => isArabic ? 'تلقائي' : 'Automatic';
+
+  String languageName(String code) {
+    switch (code) {
+      case 'auto':
+        return automatic;
+      case 'off':
+        return subtitlesOff;
+      case 'en':
+        return isArabic ? 'الإنجليزية' : 'English';
+      case 'ar':
+        return isArabic ? 'العربية' : 'Arabic';
+      case 'fr':
+        return isArabic ? 'الفرنسية' : 'French';
+      case 'es':
+        return isArabic ? 'الإسبانية' : 'Spanish';
+      case 'de':
+        return isArabic ? 'الألمانية' : 'German';
+      case 'it':
+        return isArabic ? 'الإيطالية' : 'Italian';
+      case 'pt':
+        return isArabic ? 'البرتغالية' : 'Portuguese';
+      case 'ru':
+        return isArabic ? 'الروسية' : 'Russian';
+      case 'tr':
+        return isArabic ? 'التركية' : 'Turkish';
+      case 'fa':
+        return isArabic ? 'الفارسية' : 'Persian';
+      case 'ur':
+        return isArabic ? 'الأردية' : 'Urdu';
+      case 'hi':
+        return isArabic ? 'الهندية' : 'Hindi';
+      case 'bn':
+        return isArabic ? 'البنغالية' : 'Bengali';
+      case 'id':
+        return isArabic ? 'الإندونيسية' : 'Indonesian';
+      case 'ms':
+        return isArabic ? 'الملايو' : 'Malay';
+      case 'zh':
+        return isArabic ? 'الصينية' : 'Chinese';
+      case 'ja':
+        return isArabic ? 'اليابانية' : 'Japanese';
+      case 'ko':
+        return isArabic ? 'الكورية' : 'Korean';
+      default:
+        return code;
+    }
+  }
+
+  String get zoomIn => isArabic ? 'تكبير' : 'Zoom in';
+  String get zoomOut => isArabic ? 'تصغير' : 'Zoom out';
+  String get zoomHint => isArabic
+      ? 'Ctrl + عجلة الفأرة للتكبير أو التصغير'
+      : 'Ctrl + scroll wheel to zoom';
+  String get guideFilterGroup =>
+      isArabic ? 'تصفية حسب المجموعة' : 'Filter by group';
+  String minutesLeft(int minutes) {
+    final value = minutes < 1 ? 1 : minutes;
+    return isArabic ? 'بقيت $value دقيقة' : '$value min left';
+  }
+
+
   String get programmeDetails => isArabic ? 'تفاصيل البرنامج' : 'Programme details';
   String get noDescription =>
       isArabic ? 'لا يوجد وصف لهذا البرنامج.' : 'No description for this programme.';
   String get categories => isArabic ? 'التصنيفات' : 'Categories';
+  String get newEpisode => isArabic ? 'حلقة جديدة' : 'New episode';
+  String get previouslyShown => isArabic ? 'أُعيد عرضه' : 'Previously shown';
+  String get credits => isArabic ? 'فريق العمل' : 'Credits';
+  String get directedBy => isArabic ? 'إخراج' : 'Directed by';
+  String get writtenBy => isArabic ? 'كتابة' : 'Written by';
+  String get producedBy => isArabic ? 'إنتاج' : 'Produced by';
+  String get musicBy => isArabic ? 'موسيقى' : 'Music by';
+  String get presentedBy => isArabic ? 'تقديم' : 'Presented by';
+  String get starring => isArabic ? 'بطولة' : 'Starring';
+  String get guests => isArabic ? 'ضيوف' : 'Guests';
+  String get keywords => isArabic ? 'كلمات مفتاحية' : 'Keywords';
+  String get ratedLabel => isArabic ? 'التصنيف العمري' : 'Rated';
+  String yearLabel(int year) => isArabic ? 'سنة $year' : '$year';
   String get watchChannel => isArabic ? 'مشاهدة القناة' : 'Watch channel';
   String get startsAt => isArabic ? 'يبدأ' : 'Starts';
   String get endsAt => isArabic ? 'ينتهي' : 'Ends';

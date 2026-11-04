@@ -125,6 +125,82 @@ void main() {
     expect(result.matchedChannels, 0);
   });
 
+  test('keeps rich XMLTV metadata and every artwork URL', () {
+    const xml = '''
+<tv>
+  <channel id="C1.tunarr.com"><display-name>Arabic One</display-name></channel>
+  <programme start="20261028142553 +0000" stop="20261028154453 +0000" channel="C1.tunarr.com">
+    <title>Tom and Jerry</title>
+    <episode-num system="xmltv_ns">0.4.0/1</episode-num>
+    <icon src="https://example.com/poster.jpg"/>
+    <icon src="https://example.com/still.jpg"/>
+    <credits>
+      <director>William Hanna</director>
+      <writer>Joseph Barbera</writer>
+      <actor>Tom</actor>
+      <actor>Jerry</actor>
+    </credits>
+    <rating system="MPAA"><value>TV-Y</value></rating>
+    <keyword>cartoon</keyword>
+    <keyword>classic</keyword>
+    <date>1940</date>
+    <previously-shown/>
+    <new/>
+  </programme>
+</tv>
+''';
+
+    final result = parser.parse(
+      xml,
+      channels,
+      now: DateTime.utc(2026, 10, 28, 14, 30),
+    );
+    final programme = result.epg.programmesFor(channels.first).single;
+
+    expect(programme.episode, 'S01E05');
+    expect(programme.season, 1);
+    expect(programme.episodeNumber, 5);
+    expect(programme.displayTitle, 'Tom and Jerry · S01E05');
+    expect(programme.images, <String>[
+      'https://example.com/poster.jpg',
+      'https://example.com/still.jpg',
+    ]);
+    expect(programme.iconUrl, 'https://example.com/poster.jpg');
+    expect(programme.credits.directors, <String>['William Hanna']);
+    expect(programme.credits.writers, <String>['Joseph Barbera']);
+    expect(programme.credits.actors, <String>['Tom', 'Jerry']);
+    expect(programme.rating, 'TV-Y');
+    expect(programme.ratingSystem, 'MPAA');
+    expect(programme.keywords, <String>['cartoon', 'classic']);
+    expect(programme.year, 1940);
+    expect(programme.previouslyShown, isTrue);
+    expect(programme.newEpisode, isTrue);
+  });
+
+  test('uses the on-screen episode label and derives numbers from it', () {
+    const xml = '''
+<tv>
+  <channel id="C1.tunarr.com"><display-name>Arabic One</display-name></channel>
+  <programme start="20261028142553 +0000" stop="20261028154453 +0000" channel="C1.tunarr.com">
+    <title>Episode</title>
+    <episode-num system="onscreen">S02E11</episode-num>
+  </programme>
+</tv>
+''';
+
+    final result = parser.parse(
+      xml,
+      channels,
+      now: DateTime.utc(2026, 10, 28, 14, 30),
+    );
+    final programme = result.epg.programmesFor(channels.first).single;
+    expect(programme.episode, 'S02E11');
+    expect(programme.season, 2);
+    expect(programme.episodeNumber, 11);
+    // The sub-title is missing, so the episode number is appended.
+    expect(programme.displayTitle, 'Episode · S02E11');
+  });
+
   test('parses timezone offsets and rejects malformed timestamps', () {
     expect(
       parseXmltvTime('20261028170000 +0300')!.toUtc(),

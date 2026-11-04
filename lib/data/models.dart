@@ -46,6 +46,72 @@ class SourceEndpoint {
   }
 }
 
+/// Where a source comes from. Plain IPTV sources keep the two endpoints the
+/// user typed; Tunarr and ErsatzTV only need the server address because their
+/// playlist and guide live at fixed paths.
+enum SourceProvider { iptv, tunarr, ersatzTv }
+
+extension SourceProviderX on SourceProvider {
+  bool get isServer => this != SourceProvider.iptv;
+
+  String get playlistPath => switch (this) {
+        SourceProvider.iptv => '',
+        SourceProvider.tunarr => '/api/channels.m3u',
+        SourceProvider.ersatzTv => '/iptv/channels.m3u',
+      };
+
+  String get guidePath => switch (this) {
+        SourceProvider.iptv => '',
+        SourceProvider.tunarr => '/api/xmltv.xml',
+        SourceProvider.ersatzTv => '/iptv/xmltv.xml',
+      };
+
+  String get label => switch (this) {
+        SourceProvider.iptv => 'IPTV',
+        SourceProvider.tunarr => 'Tunarr',
+        SourceProvider.ersatzTv => 'ErsatzTV',
+      };
+}
+
+const List<String> _serverEndpointSuffixes = <String>[
+  '/api/channels.m3u',
+  '/api/xmltv.xml',
+  '/iptv/channels.m3u',
+  '/iptv/xmltv.xml',
+];
+
+/// Turns whatever the user pasted into a bare server base URL.
+///
+/// Accepts a bare host (`tunarr.lan:8000`), a full endpoint URL from either
+/// provider, or a server URL with a trailing slash.
+String normalizeServerBase(String raw) {
+  var value = raw.trim();
+  if (value.isEmpty) {
+    return '';
+  }
+  final lower = value.toLowerCase();
+  for (final suffix in _serverEndpointSuffixes) {
+    if (lower.endsWith(suffix)) {
+      value = value.substring(0, value.length - suffix.length);
+      break;
+    }
+  }
+  if (!value.contains('://')) {
+    value = 'https://$value';
+  }
+  return value.replaceAll(RegExp(r'/+$'), '');
+}
+
+String providerPlaylistUrl(SourceProvider provider, String server) {
+  final base = normalizeServerBase(server);
+  return base.isEmpty ? '' : '$base${provider.playlistPath}';
+}
+
+String providerGuideUrl(SourceProvider provider, String server) {
+  final base = normalizeServerBase(server);
+  return base.isEmpty ? '' : '$base${provider.guidePath}';
+}
+
 class SourceConfig {
   const SourceConfig({
     required this.id,
@@ -53,6 +119,8 @@ class SourceConfig {
     required this.m3u,
     required this.epg,
     this.allowInsecureCerts = false,
+    this.provider = SourceProvider.iptv,
+    this.serverUrl = '',
   });
 
   final String id;
@@ -60,12 +128,19 @@ class SourceConfig {
   final SourceEndpoint m3u;
   final SourceEndpoint epg;
   final bool allowInsecureCerts;
+  final SourceProvider provider;
+
+  /// Only used by [SourceProvider.tunarr] and [SourceProvider.ersatzTv], so the
+  /// editor can show and edit the single address the user entered.
+  final String serverUrl;
 
   SourceConfig copyWith({
     String? name,
     SourceEndpoint? m3u,
     SourceEndpoint? epg,
     bool? allowInsecureCerts,
+    SourceProvider? provider,
+    String? serverUrl,
   }) {
     return SourceConfig(
       id: id,
@@ -73,6 +148,8 @@ class SourceConfig {
       m3u: m3u ?? this.m3u,
       epg: epg ?? this.epg,
       allowInsecureCerts: allowInsecureCerts ?? this.allowInsecureCerts,
+      provider: provider ?? this.provider,
+      serverUrl: serverUrl ?? this.serverUrl,
     );
   }
 
@@ -82,17 +159,26 @@ class SourceConfig {
         'm3u': m3u.toJson(),
         'epg': epg.toJson(),
         'allowInsecureCerts': allowInsecureCerts,
+        'provider': provider.name,
+        'serverUrl': serverUrl,
       };
 
   factory SourceConfig.fromJson(Map<String, dynamic> json) {
     final rawId = (json['id'] as String?)?.trim() ?? '';
     final rawName = (json['name'] as String?)?.trim() ?? '';
+    final providerName = json['provider'] as String?;
     return SourceConfig(
       id: rawId.isEmpty ? generateSourceId() : rawId,
       name: rawName.isEmpty ? 'Source' : rawName,
       m3u: SourceEndpoint.fromJson(json['m3u']),
       epg: SourceEndpoint.fromJson(json['epg']),
       allowInsecureCerts: json['allowInsecureCerts'] as bool? ?? false,
+      provider: _enumByName(
+        SourceProvider.values,
+        providerName,
+        SourceProvider.iptv,
+      ),
+      serverUrl: (json['serverUrl'] as String?)?.trim() ?? '',
     );
   }
 }
@@ -124,6 +210,62 @@ class Channel {
   String get displayNumber => number.isEmpty ? '—' : number;
 }
 
+/// People credited for a programme. XMLTV separates the roles, so Mojac keeps
+/// them apart instead of flattening everything into one "cast" line.
+class ProgrammeCredits {
+  const ProgrammeCredits({
+    this.directors = const <String>[],
+    this.writers = const <String>[],
+    this.producers = const <String>[],
+    this.composers = const <String>[],
+    this.presenters = const <String>[],
+    this.actors = const <String>[],
+    this.guests = const <String>[],
+  });
+
+  final List<String> directors;
+  final List<String> writers;
+  final List<String> producers;
+  final List<String> composers;
+  final List<String> presenters;
+  final List<String> actors;
+  final List<String> guests;
+
+  bool get isEmpty =>
+      directors.isEmpty &&
+      writers.isEmpty &&
+      producers.isEmpty &&
+      composers.isEmpty &&
+      presenters.isEmpty &&
+      actors.isEmpty &&
+      guests.isEmpty;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        if (directors.isNotEmpty) 'directors': directors,
+        if (writers.isNotEmpty) 'writers': writers,
+        if (producers.isNotEmpty) 'producers': producers,
+        if (composers.isNotEmpty) 'composers': composers,
+        if (presenters.isNotEmpty) 'presenters': presenters,
+        if (actors.isNotEmpty) 'actors': actors,
+        if (guests.isNotEmpty) 'guests': guests,
+      };
+
+  factory ProgrammeCredits.fromJson(Map<String, dynamic> json) {
+    List<String> read(String key) =>
+        (json[key] as List?)?.whereType<String>().toList(growable: false) ??
+        const <String>[];
+    return ProgrammeCredits(
+      directors: read('directors'),
+      writers: read('writers'),
+      producers: read('producers'),
+      composers: read('composers'),
+      presenters: read('presenters'),
+      actors: read('actors'),
+      guests: read('guests'),
+    );
+  }
+}
+
 class Programme {
   const Programme({
     required this.channelId,
@@ -133,8 +275,17 @@ class Programme {
     this.subTitle,
     this.description,
     this.categories = const <String>[],
-    this.iconUrl,
+    this.images = const <String>[],
     this.episode,
+    this.season,
+    this.episodeNumber,
+    this.credits = const ProgrammeCredits(),
+    this.rating,
+    this.ratingSystem,
+    this.keywords = const <String>[],
+    this.year,
+    this.previouslyShown = false,
+    this.newEpisode = false,
   });
 
   final String channelId;
@@ -144,8 +295,43 @@ class Programme {
   final String? subTitle;
   final String? description;
   final List<String> categories;
-  final String? iconUrl;
+
+  /// Every artwork URL advertised by the guide, in document order. Tunarr and
+  /// ErsatzTV both publish multiple `<icon>` tags (a poster and a still), and
+  /// Mojac keeps them all so the detail sheet can fall back gracefully.
+  final List<String> images;
   final String? episode;
+
+  /// Structured numbering, when XMLTV exposes it separately from [episode].
+  final int? season;
+  final int? episodeNumber;
+  final ProgrammeCredits credits;
+  final String? rating;
+  final String? ratingSystem;
+  final List<String> keywords;
+
+  /// Year from XMLTV's `<date>` element.
+  final int? year;
+  final bool previouslyShown;
+  final bool newEpisode;
+
+  /// First artwork URL. Kept as a getter so the many call sites that only need
+  /// one image stay simple.
+  String? get iconUrl => images.isEmpty ? null : images.first;
+
+  /// A title that includes the episode number when the guide does not already
+  /// put it in the sub-title.
+  String get displayTitle {
+    final number = episode;
+    if (number == null || number.isEmpty) {
+      return title;
+    }
+    final haystack = '${subTitle ?? ''} $title'.toUpperCase();
+    if (haystack.contains(number.toUpperCase())) {
+      return title;
+    }
+    return '$title · $number';
+  }
 
   bool isLiveAt(DateTime now) => !now.isBefore(start) && now.isBefore(stop);
 
@@ -199,21 +385,22 @@ class EpgData {
       _byChannel[channel.id] ?? const <Programme>[];
 
   Programme? nowFor(Channel channel, DateTime now) {
-    for (final programme in programmesFor(channel)) {
-      if (programme.isLiveAt(now)) {
-        return programme;
-      }
+    final programmes = programmesFor(channel);
+    // Programmes are sorted by start. Only the last programme that has begun
+    // can still be on air, so binary-search its position instead of walking
+    // the whole day for every visible channel on every tick.
+    final index = _firstStartAfter(programmes, now);
+    if (index == 0) {
+      return null;
     }
-    return null;
+    final candidate = programmes[index - 1];
+    return candidate.isLiveAt(now) ? candidate : null;
   }
 
   Programme? nextFor(Channel channel, DateTime now) {
-    for (final programme in programmesFor(channel)) {
-      if (programme.start.isAfter(now)) {
-        return programme;
-      }
-    }
-    return null;
+    final programmes = programmesFor(channel);
+    final index = _firstStartAfter(programmes, now);
+    return index < programmes.length ? programmes[index] : null;
   }
 
   List<Programme> forWindow(
@@ -221,9 +408,56 @@ class EpgData {
     DateTime windowStart,
     DateTime windowEnd,
   ) {
-    return programmesFor(channel)
-        .where((programme) => programme.overlaps(windowStart, windowEnd))
-        .toList(growable: false);
+    final programmes = programmesFor(channel);
+    if (programmes.isEmpty || !programmes.first.start.isBefore(windowEnd)) {
+      return const <Programme>[];
+    }
+    // Programmes are sorted by start, so jump close to the window instead of
+    // walking the whole day. One step back keeps a programme that started
+    // before the window but is still running.
+    final first = _firstStartAtOrAfter(programmes, windowStart);
+    final from = first > 0 ? first - 1 : 0;
+    final result = <Programme>[];
+    for (var index = from; index < programmes.length; index++) {
+      final programme = programmes[index];
+      if (!programme.start.isBefore(windowEnd)) {
+        break;
+      }
+      if (programme.overlaps(windowStart, windowEnd)) {
+        result.add(programme);
+      }
+    }
+    return result;
+  }
+
+  /// Index of the first programme starting at or after [time].
+  static int _firstStartAtOrAfter(List<Programme> programmes, DateTime time) {
+    var low = 0;
+    var high = programmes.length;
+    while (low < high) {
+      final middle = (low + high) >> 1;
+      if (programmes[middle].start.isBefore(time)) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
+  }
+
+  /// Index of the first programme starting strictly after [time].
+  static int _firstStartAfter(List<Programme> programmes, DateTime time) {
+    var low = 0;
+    var high = programmes.length;
+    while (low < high) {
+      final middle = (low + high) >> 1;
+      if (programmes[middle].start.isAfter(time)) {
+        high = middle;
+      } else {
+        low = middle + 1;
+      }
+    }
+    return low;
   }
 }
 
@@ -245,6 +479,19 @@ extension AppLanguageX on AppLanguage {
       };
 }
 
+/// Aspects the built-in player can force. `auto` is the stream's own ratio and
+/// is the only value that also clears mpv's `video-aspect-override`.
+const List<String> kPlayerAspects = <String>[
+  'auto',
+  'fill',
+  'stretch',
+  '16:9',
+  '4:3',
+  '21:9',
+];
+
+const List<String> kPlayerDeinterlaceModes = <String>['auto', 'on', 'off'];
+
 class AppSettings {
   const AppSettings({
     required this.themeFamily,
@@ -253,6 +500,17 @@ class AppSettings {
     required this.use24HourTime,
     this.nativePlayer = true,
     this.activeSourceId,
+    this.guideHours = 12,
+    this.refreshMinutes = 0,
+    this.groupFilter,
+    this.favoriteChannelIds = const <String>[],
+    this.showChannelBanner = true,
+    this.defaultAudioLanguage,
+    this.defaultSubtitleLanguage,
+    this.playerVolume = 100,
+    this.playerAspect = 'auto',
+    this.playerDeinterlace = 'auto',
+    this.channelTracks = const <String, String>{},
   });
 
   factory AppSettings.defaults() => const AppSettings(
@@ -274,6 +532,42 @@ class AppSettings {
   final bool nativePlayer;
   final String? activeSourceId;
 
+  /// How many hours the guide timeline spans. Twelve was the old fixed value;
+  /// longer windows make overnight planning possible.
+  final int guideHours;
+
+  /// Automatic background refresh interval in minutes. Zero disables it.
+  final int refreshMinutes;
+
+  /// The group chip selected on Channels and Guide, shared by both pages.
+  final String? groupFilter;
+
+  /// Channel ids starred by the user in the current playlist snapshot.
+  final List<String> favoriteChannelIds;
+
+  /// Show the set-top-box style channel banner for a few seconds whenever a
+  /// channel opens. It never depends on the guide having data.
+  final bool showChannelBanner;
+
+  /// Language code (`en`, `ar`, …) preferred for audio. Null means automatic.
+  final String? defaultAudioLanguage;
+
+  /// Language code preferred for subtitles, `off` to start with subtitles
+  /// disabled, or null for automatic.
+  final String? defaultSubtitleLanguage;
+
+  /// Last volume set by the user, restored on the next channel.
+  final double playerVolume;
+
+  /// One of [kPlayerAspects].
+  final String playerAspect;
+
+  /// One of [kPlayerDeinterlaceModes].
+  final String playerDeinterlace;
+
+  /// Per-channel audio/subtitle choice, encoded as `audioId|subtitleId`.
+  final Map<String, String> channelTracks;
+
   AppSettings copyWith({
     ThemeFamily? themeFamily,
     ThemeAccent? accent,
@@ -281,6 +575,17 @@ class AppSettings {
     bool? use24HourTime,
     bool? nativePlayer,
     Object? activeSourceId = _unset,
+    int? guideHours,
+    int? refreshMinutes,
+    Object? groupFilter = _unset,
+    List<String>? favoriteChannelIds,
+    bool? showChannelBanner,
+    Object? defaultAudioLanguage = _unset,
+    Object? defaultSubtitleLanguage = _unset,
+    double? playerVolume,
+    String? playerAspect,
+    String? playerDeinterlace,
+    Map<String, String>? channelTracks,
   }) {
     return AppSettings(
       themeFamily: themeFamily ?? this.themeFamily,
@@ -291,6 +596,23 @@ class AppSettings {
       activeSourceId: identical(activeSourceId, _unset)
           ? this.activeSourceId
           : activeSourceId as String?,
+      guideHours: guideHours ?? this.guideHours,
+      refreshMinutes: refreshMinutes ?? this.refreshMinutes,
+      groupFilter: identical(groupFilter, _unset)
+          ? this.groupFilter
+          : groupFilter as String?,
+      favoriteChannelIds: favoriteChannelIds ?? this.favoriteChannelIds,
+      showChannelBanner: showChannelBanner ?? this.showChannelBanner,
+      defaultAudioLanguage: identical(defaultAudioLanguage, _unset)
+          ? this.defaultAudioLanguage
+          : defaultAudioLanguage as String?,
+      defaultSubtitleLanguage: identical(defaultSubtitleLanguage, _unset)
+          ? this.defaultSubtitleLanguage
+          : defaultSubtitleLanguage as String?,
+      playerVolume: (playerVolume ?? this.playerVolume).clamp(0, 100).toDouble(),
+      playerAspect: playerAspect ?? this.playerAspect,
+      playerDeinterlace: playerDeinterlace ?? this.playerDeinterlace,
+      channelTracks: channelTracks ?? this.channelTracks,
     );
   }
 
@@ -301,9 +623,32 @@ class AppSettings {
         'use24HourTime': use24HourTime,
         'nativePlayer': nativePlayer,
         'activeSourceId': activeSourceId,
+        'guideHours': guideHours,
+        'refreshMinutes': refreshMinutes,
+        'groupFilter': groupFilter,
+        'favorites': favoriteChannelIds,
+        'showChannelBanner': showChannelBanner,
+        'defaultAudioLanguage': defaultAudioLanguage,
+        'defaultSubtitleLanguage': defaultSubtitleLanguage,
+        'playerVolume': playerVolume,
+        'playerAspect': playerAspect,
+        'playerDeinterlace': playerDeinterlace,
+        'channelTracks': channelTracks,
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
+    final rawGroup = (json['groupFilter'] as String?)?.trim();
+    final rawTracks = json['channelTracks'];
+    final channelTracks = <String, String>{};
+    if (rawTracks is Map) {
+      for (final entry in rawTracks.entries) {
+        final key = entry.key;
+        final value = entry.value;
+        if (key is String && value is String && value.contains('|')) {
+          channelTracks[key] = value;
+        }
+      }
+    }
     return AppSettings(
       themeFamily: _enumByName(
         ThemeFamily.values,
@@ -323,8 +668,43 @@ class AppSettings {
       use24HourTime: json['use24HourTime'] as bool? ?? false,
       nativePlayer: json['nativePlayer'] as bool? ?? true,
       activeSourceId: json['activeSourceId'] as String?,
+      guideHours:
+          ((json['guideHours'] as num?)?.toInt() ?? 12).clamp(12, 168).toInt(),
+      refreshMinutes: ((json['refreshMinutes'] as num?)?.toInt() ?? 0)
+          .clamp(0, 24 * 60)
+          .toInt(),
+      groupFilter: rawGroup == null || rawGroup.isEmpty ? null : rawGroup,
+      favoriteChannelIds:
+          (json['favorites'] as List?)?.whereType<String>().toList(
+                growable: false,
+              ) ??
+              const <String>[],
+      showChannelBanner: json['showChannelBanner'] as bool? ?? true,
+      defaultAudioLanguage: _cleanLanguage(json['defaultAudioLanguage']),
+      defaultSubtitleLanguage: _cleanLanguage(json['defaultSubtitleLanguage']),
+      playerVolume:
+          ((json['playerVolume'] as num?)?.toDouble() ?? 100).clamp(0, 100).toDouble(),
+      playerAspect: _oneOf(json['playerAspect'], kPlayerAspects, 'auto'),
+      playerDeinterlace: _oneOf(
+        json['playerDeinterlace'],
+        kPlayerDeinterlaceModes,
+        'auto',
+      ),
+      channelTracks: Map<String, String>.unmodifiable(channelTracks),
     );
   }
+}
+
+String? _cleanLanguage(Object? value) {
+  if (value is! String) {
+    return null;
+  }
+  final trimmed = value.trim().toLowerCase();
+  return trimmed.isEmpty || trimmed == 'auto' ? null : trimmed;
+}
+
+String _oneOf(Object? value, List<String> options, String fallback) {
+  return value is String && options.contains(value) ? value : fallback;
 }
 
 const Object _unset = Object();

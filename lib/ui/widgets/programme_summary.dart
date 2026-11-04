@@ -4,6 +4,7 @@ import '../../core/bidi.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../l10n/strings.dart';
+import 'live_progress_bar.dart';
 
 class ProgrammeSummary extends StatelessWidget {
   const ProgrammeSummary({
@@ -79,9 +80,15 @@ class ProgrammeSummary extends StatelessWidget {
               ],
             ],
           ),
+          const SizedBox(height: 4),
+          LiveProgressBar(
+            programme: current,
+            height: 3,
+            showRemaining: !dense,
+          ),
           if (current.subTitle != null)
             Padding(
-              padding: const EdgeInsetsDirectional.only(top: 1),
+              padding: const EdgeInsetsDirectional.only(top: 4),
               child: BidiText(
                 current.subTitle!,
                 maxLines: 1,

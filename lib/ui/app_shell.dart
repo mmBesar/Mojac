@@ -1,14 +1,17 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../core/bidi.dart';
 import '../core/theme.dart';
 import '../data/app_state.dart';
 import '../l10n/strings.dart';
 import 'pages/channels_page.dart';
+import 'pages/favorites_page.dart';
 import 'pages/guide_page.dart';
+import 'pages/search_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/sources_page.dart';
+import 'widgets/source_switcher.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -18,10 +21,44 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
+  static const int _tabCount = 4;
+  static const double _swipeVelocity = 260;
+
   int _index = 0;
 
+  void _selectTab(int index) {
+    if (index == _index || index < 0 || index >= _tabCount) {
+      return;
+    }
+    setState(() => _index = index);
+  }
+
   void _openSources() {
-    setState(() => _index = 2);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => const SourcesScreen(),
+      ),
+    );
+  }
+
+  void _openSearch() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => const SearchPage(),
+      ),
+    );
+  }
+
+  /// Swipe left/right between tabs on Android. Direction is reversed for RTL
+  /// interfaces so "forward" always follows the reading direction.
+  void _handleSwipe(DragEndDetails details) {
+    final velocity = details.velocity.pixelsPerSecond.dx;
+    if (velocity.abs() < _swipeVelocity) {
+      return;
+    }
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    final forward = rtl ? velocity > 0 : velocity < 0;
+    _selectTab(_index + (forward ? 1 : -1));
   }
 
   @override
@@ -33,74 +70,34 @@ class _AppShellState extends State<AppShell> {
     final pages = <Widget>[
       ChannelsPage(onAddSource: _openSources),
       GuidePage(onAddSource: _openSources),
-      const SourcesPage(),
+      FavoritesPage(
+        onAddSource: _openSources,
+        onBrowseChannels: () => _selectTab(0),
+      ),
       SettingsPage(onOpenSources: _openSources),
     ];
     final labels = <String>[
       strings.channels,
       strings.guide,
-      strings.sources,
+      strings.favorites,
       strings.settings,
     ];
     final icons = <IconData>[
       Icons.live_tv_rounded,
       Icons.calendar_month_rounded,
-      Icons.dns_rounded,
+      Icons.star_rounded,
       Icons.settings_rounded,
     ];
 
     final appBar = AppBar(
-      titleSpacing: 16,
-      title: Row(
-        children: <Widget>[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(9),
-            child: Image.asset(
-              'assets/branding/mojac_icon.png',
-              width: 34,
-              height: 34,
-              fit: BoxFit.cover,
-              filterQuality: FilterQuality.medium,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                const Text(
-                  'Mojac',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-                if (state.activeSource != null)
-                  BidiText(
-                    state.activeSource!.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: colors.subtext0,
-                        ),
-                  )
-                else
-                  Text(
-                    strings.appTagline,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: colors.subtext0,
-                        ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      titleSpacing: 12,
+      title: SourceSwitcherButton(onManageSources: _openSources),
       actions: <Widget>[
+        IconButton(
+          tooltip: strings.search,
+          onPressed: _openSearch,
+          icon: const Icon(Icons.search_rounded),
+        ),
         IconButton(
           tooltip: strings.refresh,
           onPressed: state.isLoading ? null : () => state.refresh(),
@@ -120,6 +117,7 @@ class _AppShellState extends State<AppShell> {
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 900;
         final body = IndexedStack(index: _index, children: pages);
+        final swipeable = defaultTargetPlatform == TargetPlatform.android;
 
         if (wide) {
           final extended = constraints.maxWidth >= 1280;
@@ -130,8 +128,7 @@ class _AppShellState extends State<AppShell> {
                 NavigationRail(
                   extended: extended,
                   selectedIndex: _index,
-                  onDestinationSelected: (index) =>
-                      setState(() => _index = index),
+                  onDestinationSelected: _selectTab,
                   labelType: extended
                       ? NavigationRailLabelType.none
                       : NavigationRailLabelType.all,
@@ -141,7 +138,7 @@ class _AppShellState extends State<AppShell> {
                       NavigationRailDestination(
                         icon: Icon(icons[index]),
                         selectedIcon: Icon(icons[index], color: colors.accent),
-                        label: BidiText(labels[index]),
+                        label: Text(labels[index]),
                       ),
                   ],
                 ),
@@ -158,18 +155,51 @@ class _AppShellState extends State<AppShell> {
 
         return Scaffold(
           appBar: appBar,
-          body: body,
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: _index,
-            onDestinationSelected: (index) => setState(() => _index = index),
-            destinations: <NavigationDestination>[
-              for (var index = 0; index < labels.length; index++)
-                NavigationDestination(
-                  icon: Icon(icons[index]),
-                  selectedIcon: Icon(icons[index], color: colors.accent),
-                  label: labels[index],
+          body: swipeable
+              ? GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragEnd: _handleSwipe,
+                  child: body,
+                )
+              : body,
+          bottomNavigationBar: SafeArea(
+            top: false,
+            minimum: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: colors.mantle,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: colors.surface1),
+                boxShadow: <BoxShadow>[
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.24),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: NavigationBar(
+                  selectedIndex: _index,
+                  onDestinationSelected: _selectTab,
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  height: 66,
+                  labelBehavior:
+                      NavigationDestinationLabelBehavior.alwaysShow,
+                  destinations: <NavigationDestination>[
+                    for (var index = 0; index < labels.length; index++)
+                      NavigationDestination(
+                        icon: Icon(icons[index]),
+                        selectedIcon:
+                            Icon(icons[index], color: colors.accent),
+                        label: labels[index],
+                      ),
+                  ],
                 ),
-            ],
+              ),
+            ),
           ),
         );
       },

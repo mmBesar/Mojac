@@ -10,6 +10,19 @@ import '../../l10n/strings.dart';
 import '../source_editor_page.dart';
 import '../widgets/empty_state.dart';
 
+/// Full-page wrapper used when Sources is opened from the app bar or Settings.
+class SourcesScreen extends StatelessWidget {
+  const SourcesScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(context.strings.sources)),
+      body: const SourcesPage(),
+    );
+  }
+}
+
 class SourcesPage extends StatelessWidget {
   const SourcesPage({super.key});
 
@@ -70,24 +83,12 @@ class SourcesPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      strings.sources,
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      strings.noSourcesBody,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colors.subtext0,
-                            height: 1.4,
-                          ),
-                    ),
-                  ],
+                child: Text(
+                  strings.sourcesHelp,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.subtext0,
+                        height: 1.4,
+                      ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -236,7 +237,7 @@ class _SourceCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 3),
                           BidiText(
-                            _locationLabel(source.m3u),
+                            _locationLabel(source),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall?.copyWith(
@@ -289,6 +290,10 @@ class _SourceCard extends StatelessWidget {
                   runSpacing: 8,
                   children: <Widget>[
                     _InfoChip(
+                      icon: _providerIcon(source.provider),
+                      label: source.provider.label,
+                    ),
+                    _InfoChip(
                       icon: Icons.playlist_play_rounded,
                       label: source.m3u.isFile ? strings.file : strings.url,
                     ),
@@ -315,7 +320,19 @@ class _SourceCard extends StatelessWidget {
     );
   }
 
-  String _locationLabel(SourceEndpoint endpoint) {
+  String _locationLabel(SourceConfig source) {
+    if (source.provider.isServer) {
+      final base = normalizeServerBase(source.serverUrl);
+      final uri = Uri.tryParse(base);
+      if (uri != null && uri.host.isNotEmpty) {
+        return uri.hasPort ? '${uri.host}:${uri.port}' : uri.host;
+      }
+      return base.isEmpty ? '—' : base;
+    }
+    return _endpointLabel(source.m3u);
+  }
+
+  String _endpointLabel(SourceEndpoint endpoint) {
     final value = endpoint.value.trim();
     if (value.isEmpty) {
       return '—';
@@ -331,6 +348,14 @@ class _SourceCard extends StatelessWidget {
       return '${uri.host}$path';
     }
     return value;
+  }
+
+  IconData _providerIcon(SourceProvider provider) {
+    return switch (provider) {
+      SourceProvider.iptv => Icons.playlist_play_rounded,
+      SourceProvider.tunarr => Icons.view_stream_rounded,
+      SourceProvider.ersatzTv => Icons.live_tv_rounded,
+    };
   }
 }
 

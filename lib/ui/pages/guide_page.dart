@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/bidi.dart';
@@ -13,6 +16,7 @@ import '../player_launcher.dart';
 import '../widgets/channel_logo.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/error_banner.dart';
+import '../widgets/group_filter_bar.dart';
 import '../widgets/programme_poster.dart';
 import '../widgets/programme_sheet.dart';
 import '../widgets/warnings_panel.dart';
@@ -21,9 +25,37 @@ import 'channel_guide_page.dart';
 const double _channelWidth = 84;
 const double _rowHeight = 110;
 const double _headerHeight = 50;
-const double _minPixelsPerMinute = 4;
-const double _maxPixelsPerMinute = 12;
-const int _windowMinutes = 12 * 60;
+
+/// The old guide was locked to 4-12 px/minute, which made ErsatzTV's five to
+/// eight minute programmes unreadable. Two px/minute fits a whole week on a
+/// desktop, while 180 px/minute turns a six-minute show into 1,080 px of
+/// readable block. The guide opens 35% denser than the historical 4 px so
+/// short programmes get a visible title without the user touching the slider.
+const double _minPixelsPerMinute = 2;
+const double _defaultPixelsPerMinute = 5.4;
+const double _maxPixelsPerMinute = 180;
+
+/// Minimum pixel gaps for timeline ticks. Labels need more room than grid
+/// lines, so they choose their interval independently.
+const double _labelSpacing = 64;
+const double _gridSpacing = 56;
+
+/// Labels are only built around the visible slice of the header. A 168-hour
+/// window at deep zoom is millions of pixels wide, and building a Text for
+/// every five-minute mark would create thousands of widgets nothing can see.
+const double _labelOverscan = 700;
+
+/// Chooses the finest tick interval (from [candidates]) that keeps at least
+/// [spacing] pixels between marks.
+int _tickMinutes(double pixelsPerMinute, double spacing) {
+  const candidates = <int>[5, 10, 15, 30, 60, 120, 360];
+  for (final minutes in candidates) {
+    if (minutes * pixelsPerMinute >= spacing) {
+      return minutes;
+    }
+  }
+  return candidates.last;
+}
 
 /// Each row carries the channel name in a thin strip above its programmes.
 /// The strip is pinned to the left of the visible timeline (it does not scroll
@@ -61,14 +93,16 @@ class _GuidePageState extends State<GuidePage> {
 
   late DateTime _windowStart;
 
-  /// Timeline density. The guide opens at the historical 4 px/minute and can
-  /// zoom in to 12 px/minute for reading long programme titles.
-  double _pixelsPerMinute = _minPixelsPerMinute;
+  /// Timeline density. The guide opens at 5.4 px/minute (the historical 4 px
+  /// plus 35%) and can zoom from a whole week down to very short programmes.
+  double _pixelsPerMinute = _defaultPixelsPerMinute;
+
+  int get _windowMinutes => context.read<AppState>().settings.guideHours * 60;
 
   double get _timelineWidth => _windowMinutes * _pixelsPerMinute;
 
   /// Horizontal viewport in timeline pixels. Programme posters are only
-  /// requested for blocks near the visible window, so a 12-hour grid does not
+  /// requested for blocks near the visible window, so a long grid does not
   /// fire hundreds of image downloads for rows the user cannot see.
   double _visibleStart = 0;
   double _visibleEnd = 900;
@@ -78,7 +112,7 @@ class _GuidePageState extends State<GuidePage> {
   double _rowEnd = 900;
 
   /// Guards the one-frame window rollover when the app resumes after enough
-  /// time has passed for "now" to fall outside the displayed twelve hours.
+  /// time has passed for "now" to fall outside the displayed schedule.
   bool _windowSyncScheduled = false;
 
   @override
@@ -108,7 +142,8 @@ class _GuidePageState extends State<GuidePage> {
     super.dispose();
   }
 
-  DateTime get _windowEnd => _windowStart.add(const Duration(hours: 12));
+  DateTime get _windowEnd =>
+      _windowStart.add(Duration(minutes: _windowMinutes));
 
   void _syncHeader() {
     if (!_headerHorizontal.hasClients || !_bodyHorizontal.hasClients) {
@@ -204,6 +239,25 @@ class _GuidePageState extends State<GuidePage> {
         curve: Curves.easeOutCubic,
       );
     });
+  }
+
+  /// Ctrl/⌘ + scroll changes the timeline scale. The event is claimed in the
+  /// pointer-signal resolver so the grid does not also scroll sideways.
+  void _handlePointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) {
+      return;
+    }
+    final keyboard = HardwareKeyboard.instance;
+    if (!keyboard.isControlPressed && !keyboard.isMetaPressed) {
+      return;
+    }
+    GestureBinding.instance.pointerSignalResolver
+        .register(event, (PointerSignalEvent _) {});
+    final delta = event.scrollDelta.dy;
+    if (delta == 0) {
+      return;
+    }
+    _setZoom(_pixelsPerMinute * (delta > 0 ? 0.88 : 1.14));
   }
 
   /// Changes the timeline scale without losing the time the user is looking
@@ -308,8 +362,38 @@ class _GuidePageState extends State<GuidePage> {
       );
     }
 
-    final channels = state.channels;
+    final groups = channelGroups(state.channels);
+    final group = groups.contains(state.settings.groupFilter)
+        ? state.settings.groupFilter
+        : null;
+    final channels = group == null
+        ? state.channels
+        : state.channels
+            .where((channel) => channel.group == group)
+            .toList(growable: false);
+    if (channels.isEmpty) {
+      return Column(
+        children: <Widget>[
+          GroupFilterBar(
+            groups: groups,
+            selected: group,
+            onChanged: (value) => unawaited(state.setGroupFilter(value)),
+          ),
+          Expanded(
+            child: EmptyState(
+              icon: Icons.filter_alt_off_rounded,
+              title: strings.noGroupChannels,
+              body: strings.guideEmptyBody,
+              actionLabel: strings.allGroups,
+              onAction: () => unawaited(state.setGroupFilter(null)),
+            ),
+          ),
+        ],
+      );
+    }
     final allowInsecure = state.activeSource?.allowInsecureCerts ?? false;
+    final uiDirection = Directionality.of(context);
+    final viewportWidth = math.max(1.0, _visibleEnd - _visibleStart);
     final now = state.now;
     _ensureWindowContainsNow(now);
     final nowOffset = now.difference(_windowStart).inSeconds / 60 *
@@ -330,7 +414,7 @@ class _GuidePageState extends State<GuidePage> {
       ),
     );
 
-    return Column(
+    final grid = Column(
       children: <Widget>[
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
@@ -370,6 +454,11 @@ class _GuidePageState extends State<GuidePage> {
                 min: _minPixelsPerMinute,
                 max: _maxPixelsPerMinute,
                 onChanged: _setZoom,
+                onStep: (direction) => _setZoom(
+                  direction > 0
+                      ? _pixelsPerMinute * 1.35
+                      : _pixelsPerMinute / 1.35,
+                ),
               ),
               const SizedBox(width: 2),
               IconButton(
@@ -380,6 +469,11 @@ class _GuidePageState extends State<GuidePage> {
               ),
             ],
           ),
+        ),
+        GroupFilterBar(
+          groups: groups,
+          selected: group,
+          onChanged: (value) => unawaited(state.setGroupFilter(value)),
         ),
         if (state.isLoading) const LinearProgressIndicator(minHeight: 2),
         if (state.warnings.isNotEmpty)
@@ -411,14 +505,20 @@ class _GuidePageState extends State<GuidePage> {
                           controller: _headerHorizontal,
                           scrollDirection: Axis.horizontal,
                           physics: const NeverScrollableScrollPhysics(),
-                          child: SizedBox(
-                            width: _timelineWidth,
-                            height: _headerHeight,
-                            child: _TimeHeader(
-                              start: _windowStart,
-                              pixelsPerMinute: _pixelsPerMinute,
-                              use24HourTime: state.settings.use24HourTime,
-                              nowOffset: showNow ? nowOffset : null,
+                          child: Listener(
+                            onPointerSignal: _handlePointerSignal,
+                            child: SizedBox(
+                              width: _timelineWidth,
+                              height: _headerHeight,
+                              child: _TimeHeader(
+                                start: _windowStart,
+                                windowMinutes: _windowMinutes,
+                                pixelsPerMinute: _pixelsPerMinute,
+                                use24HourTime: state.settings.use24HourTime,
+                                nowOffset: showNow ? nowOffset : null,
+                                visibleStart: _visibleStart - _labelOverscan,
+                                visibleEnd: _visibleEnd + _labelOverscan,
+                              ),
                             ),
                           ),
                         ),
@@ -460,72 +560,78 @@ class _GuidePageState extends State<GuidePage> {
                           child: SingleChildScrollView(
                             controller: _bodyHorizontal,
                             scrollDirection: Axis.horizontal,
-                            child: SizedBox(
-                              width: _timelineWidth,
-                              height: channels.length * _rowHeight,
-                              child: Stack(
-                                children: <Widget>[
-                                  Positioned.fill(
-                                    child: CustomPaint(
-                                      painter: _GridPainter(
-                                        start: _windowStart,
-                                        pixelsPerMinute: _pixelsPerMinute,
-                                        gridColor:
-                                            context.mojacColors.surface1,
-                                        hourColor:
-                                            context.mojacColors.overlay0
-                                                .withValues(alpha: 0.5),
-                                      ),
-                                    ),
-                                  ),
-                                  Column(
-                                    children: <Widget>[
-                                      SizedBox(height: firstRow * _rowHeight),
-                                      for (var index = firstRow;
-                                          index <= lastRow;
-                                          index++)
-                                        _GuideRow(
-                                          channel: channels[index],
-                                          epg: state.epg,
-                                          windowStart: _windowStart,
-                                          windowEnd: _windowEnd,
-                                          now: now,
+                            child: Listener(
+                              onPointerSignal: _handlePointerSignal,
+                              child: SizedBox(
+                                width: _timelineWidth,
+                                height: channels.length * _rowHeight,
+                                child: Stack(
+                                  children: <Widget>[
+                                    Positioned.fill(
+                                      child: CustomPaint(
+                                        painter: _GridPainter(
+                                          start: _windowStart,
+                                          windowMinutes: _windowMinutes,
                                           pixelsPerMinute: _pixelsPerMinute,
-                                          use24HourTime:
-                                              state.settings.use24HourTime,
-                                          allowInsecure: allowInsecure,
-                                          even: index.isEven,
-                                          visibleStart: _visibleStart - 600,
-                                          visibleEnd: _visibleEnd + 600,
-                                          horizontalOffset: _horizontalOffset,
-                                          onWatch: () => _openPlayer(
-                                            channels[index],
-                                          ),
-                                          onGuide: () => _openGuide(
-                                            channels[index],
-                                          ),
-                                        ),
-                                      SizedBox(
-                                        height: (channels.length -
-                                                1 -
-                                                lastRow) *
-                                            _rowHeight,
-                                      ),
-                                    ],
-                                  ),
-                                  if (showNow)
-                                    Positioned(
-                                      left: nowOffset,
-                                      top: 0,
-                                      bottom: 0,
-                                      width: 2,
-                                      child: IgnorePointer(
-                                        child: Container(
-                                          color: context.mojacColors.accent,
+                                          gridColor:
+                                              context.mojacColors.surface1,
+                                          hourColor:
+                                              context.mojacColors.overlay0
+                                                  .withValues(alpha: 0.5),
                                         ),
                                       ),
                                     ),
-                                ],
+                                    Column(
+                                      children: <Widget>[
+                                        SizedBox(height: firstRow * _rowHeight),
+                                        for (var index = firstRow;
+                                            index <= lastRow;
+                                            index++)
+                                          _GuideRow(
+                                            channel: channels[index],
+                                            epg: state.epg,
+                                            windowStart: _windowStart,
+                                            windowEnd: _windowEnd,
+                                            now: now,
+                                            pixelsPerMinute: _pixelsPerMinute,
+                                            use24HourTime:
+                                                state.settings.use24HourTime,
+                                            allowInsecure: allowInsecure,
+                                            even: index.isEven,
+                                            visibleStart: _visibleStart - 600,
+                                            visibleEnd: _visibleEnd + 600,
+                                            horizontalOffset: _horizontalOffset,
+                                            viewportWidth: viewportWidth,
+                                            uiDirection: uiDirection,
+                                            onWatch: () => _openPlayer(
+                                              channels[index],
+                                            ),
+                                            onGuide: () => _openGuide(
+                                              channels[index],
+                                            ),
+                                          ),
+                                        SizedBox(
+                                          height: (channels.length -
+                                                  1 -
+                                                  lastRow) *
+                                              _rowHeight,
+                                        ),
+                                      ],
+                                    ),
+                                    if (showNow)
+                                      Positioned(
+                                        left: nowOffset,
+                                        top: 0,
+                                        bottom: 0,
+                                        width: 2,
+                                        child: IgnorePointer(
+                                          child: Container(
+                                            color: context.mojacColors.accent,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -540,6 +646,8 @@ class _GuidePageState extends State<GuidePage> {
         ),
       ],
     );
+
+    return grid;
   }
 }
 
@@ -548,15 +656,17 @@ DateTime _floorToHalfHour(DateTime value) {
   return DateTime(value.year, value.month, value.day, value.hour, minute);
 }
 
-/// Compact density control for the timeline. The guide spans twelve hours, so
-/// the slider trades how much of the schedule is visible against how much room
-/// each programme gets for its title.
+/// Compact density control for the timeline. The slider trades how much of the
+/// schedule is visible against how much room each programme gets for its
+/// title; the two buttons give touch users a precise step without dragging a
+/// tiny slider thumb.
 class _TimelineZoom extends StatelessWidget {
   const _TimelineZoom({
     required this.value,
     required this.min,
     required this.max,
     required this.onChanged,
+    required this.onStep,
   });
 
   final double value;
@@ -564,36 +674,99 @@ class _TimelineZoom extends StatelessWidget {
   final double max;
   final ValueChanged<double> onChanged;
 
+  /// Positive zooms in, negative zooms out.
+  final ValueChanged<int> onStep;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.mojacColors;
     final strings = context.strings;
-    return Semantics(
-      label: strings.timelineZoom,
-      child: Tooltip(
-        message: strings.timelineZoom,
+    // Zoom is logarithmic so the slider gives the 2-20 px/minute range (where
+    // most short-programme work happens) as much travel as the deep end.
+    final span = math.log(max / min);
+    final fraction =
+        span == 0 ? 0.0 : (math.log(value / min) / span).clamp(0.0, 1.0);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        _ZoomButton(
+          icon: Icons.remove_rounded,
+          tooltip: strings.zoomOut,
+          enabled: value > min + 0.01,
+          onTap: () => onStep(-1),
+        ),
+        Semantics(
+          label: strings.timelineZoom,
+          child: Tooltip(
+            message: strings.timelineZoom,
+            child: SizedBox(
+              width: 86,
+              height: 32,
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 2,
+                  overlayShape:
+                      const RoundSliderOverlayShape(overlayRadius: 12),
+                  thumbShape:
+                      const RoundSliderThumbShape(enabledThumbRadius: 6),
+                  activeTrackColor: colors.accent,
+                  inactiveTrackColor: colors.surface1,
+                  thumbColor: colors.accent,
+                  overlayColor: colors.accent.withValues(alpha: 0.16),
+                ),
+                child: Slider(
+                  value: fraction,
+                  min: 0,
+                  max: 1,
+                  divisions: 100,
+                  semanticFormatterCallback: (_) =>
+                      '${value.toStringAsFixed(1)} px/min',
+                  onChanged: (position) =>
+                      onChanged(min * math.pow(max / min, position).toDouble()),
+                ),
+              ),
+            ),
+          ),
+        ),
+        _ZoomButton(
+          icon: Icons.add_rounded,
+          tooltip: strings.zoomIn,
+          enabled: value < max - 0.01,
+          onTap: () => onStep(1),
+        ),
+      ],
+    );
+  }
+}
+
+class _ZoomButton extends StatelessWidget {
+  const _ZoomButton({
+    required this.icon,
+    required this.tooltip,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.mojacColors;
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(9),
+        onTap: enabled ? onTap : null,
         child: SizedBox(
-          width: 104,
-          height: 32,
-          child: SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 2,
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-              activeTrackColor: colors.accent,
-              inactiveTrackColor: colors.surface1,
-              thumbColor: colors.accent,
-              overlayColor: colors.accent.withValues(alpha: 0.16),
-            ),
-            child: Slider(
-              value: value,
-              min: min,
-              max: max,
-              divisions: 16,
-              semanticFormatterCallback: (zoom) =>
-                  '${zoom.toStringAsFixed(0)} px/min',
-              onChanged: onChanged,
-            ),
+          width: 30,
+          height: 30,
+          child: Icon(
+            icon,
+            size: 17,
+            color: enabled ? colors.subtext1 : colors.surface2,
           ),
         ),
       ),
@@ -628,14 +801,22 @@ class _CornerCell extends StatelessWidget {
 class _TimeHeader extends StatelessWidget {
   const _TimeHeader({
     required this.start,
+    required this.windowMinutes,
     required this.pixelsPerMinute,
     required this.use24HourTime,
+    required this.visibleStart,
+    required this.visibleEnd,
     this.nowOffset,
   });
 
   final DateTime start;
+  final int windowMinutes;
   final double pixelsPerMinute;
   final bool use24HourTime;
+
+  /// Timeline slice to build labels for, in timeline pixels.
+  final double visibleStart;
+  final double visibleEnd;
   final double? nowOffset;
 
   @override
@@ -643,22 +824,31 @@ class _TimeHeader extends StatelessWidget {
     final colors = context.mojacColors;
     final strings = context.strings;
     final labels = <Widget>[];
-    for (var minute = 0; minute <= _windowMinutes; minute += 30) {
-      final time = start.add(Duration(minutes: minute));
-      if (time.minute != 0) {
+    // Pick the finest interval whose labels still have room. Deep zoom gets
+    // five-minute labels for short episodes, while a two px/minute week view
+    // keeps hourly labels.
+    final step = _tickMinutes(pixelsPerMinute, _labelSpacing);
+    for (var minute = 0; minute <= windowMinutes; minute += step) {
+      final x = minute * pixelsPerMinute + 6;
+      if (x < visibleStart || x > visibleEnd) {
         continue;
       }
+      final time = start.add(Duration(minutes: minute));
+      final onHour = time.minute == 0;
       labels.add(
         Positioned(
-          left: minute * pixelsPerMinute + 6,
+          left: x,
           top: 0,
           bottom: 0,
           child: Center(
             child: Text(
-              strings.formatHour(time, use24HourTime: use24HourTime),
+              onHour
+                  ? strings.formatHour(time, use24HourTime: use24HourTime)
+                  : strings.formatTime(time, use24HourTime: use24HourTime),
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: colors.subtext0,
-                    fontWeight: FontWeight.w600,
+                    color: onHour ? colors.subtext0 : colors.overlay0,
+                    fontWeight: onHour ? FontWeight.w600 : FontWeight.w500,
+                    fontSize: onHour ? null : 9,
                     fontFeatures: const <FontFeature>[
                       FontFeature.tabularFigures(),
                     ],
@@ -701,12 +891,14 @@ class _TimeHeader extends StatelessWidget {
 class _GridPainter extends CustomPainter {
   const _GridPainter({
     required this.start,
+    required this.windowMinutes,
     required this.pixelsPerMinute,
     required this.gridColor,
     required this.hourColor,
   });
 
   final DateTime start;
+  final int windowMinutes;
   final double pixelsPerMinute;
   final Color gridColor;
   final Color hourColor;
@@ -714,10 +906,22 @@ class _GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..strokeWidth = 1;
-    for (var minute = 0; minute <= _windowMinutes; minute += 30) {
+    // Pick the finest grid whose lines do not visually merge. Deep zoom adds
+    // five-minute lines, which makes a six-minute ErsatzTV episode readable;
+    // a week view falls back to half-hour lines.
+    final step = _tickMinutes(pixelsPerMinute, _gridSpacing);
+    for (var minute = 0; minute <= windowMinutes; minute += step) {
       final x = minute * pixelsPerMinute;
-      final isHour = start.add(Duration(minutes: minute)).minute == 0;
-      paint.color = isHour ? hourColor : gridColor;
+      final onHour = start.add(Duration(minutes: minute)).minute == 0;
+      if (onHour) {
+        paint.color = hourColor;
+      } else if (minute % 60 == 0) {
+        paint.color = hourColor.withValues(alpha: 0.35);
+      } else if (minute % 30 == 0) {
+        paint.color = gridColor;
+      } else {
+        paint.color = gridColor.withValues(alpha: 0.45);
+      }
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
     }
   }
@@ -725,6 +929,7 @@ class _GridPainter extends CustomPainter {
   @override
   bool shouldRepaint(_GridPainter oldDelegate) {
     return oldDelegate.start != start ||
+        oldDelegate.windowMinutes != windowMinutes ||
         oldDelegate.pixelsPerMinute != pixelsPerMinute ||
         oldDelegate.gridColor != gridColor ||
         oldDelegate.hourColor != hourColor;
@@ -809,6 +1014,8 @@ class _GuideRow extends StatelessWidget {
     required this.visibleStart,
     required this.visibleEnd,
     required this.horizontalOffset,
+    required this.viewportWidth,
+    required this.uiDirection,
     required this.onWatch,
     required this.onGuide,
   });
@@ -825,6 +1032,8 @@ class _GuideRow extends StatelessWidget {
   final double visibleStart;
   final double visibleEnd;
   final ValueListenable<double> horizontalOffset;
+  final double viewportWidth;
+  final TextDirection uiDirection;
   final VoidCallback onWatch;
   final VoidCallback onGuide;
 
@@ -958,8 +1167,13 @@ class _GuideRow extends StatelessWidget {
     if (width < 1) {
       return const SizedBox.shrink();
     }
+    // Only lay out blocks near the horizontal viewport. A 168-hour window at
+    // deep zoom is millions of pixels wide, and building every programme in
+    // it would create tens of thousands of widgets that never become visible.
+    if (left + width < visibleStart || left > visibleEnd) {
+      return const SizedBox.shrink();
+    }
     final live = programme.isLiveAt(now);
-    final nearViewport = left + width >= visibleStart && left <= visibleEnd;
     return Positioned(
       left: left,
       top: _programmeTop,
@@ -969,8 +1183,12 @@ class _GuideRow extends StatelessWidget {
         programme: programme,
         live: live,
         allowInsecure: allowInsecure,
-        showPoster: nearViewport,
         use24HourTime: use24HourTime,
+        left: left,
+        width: width,
+        horizontalOffset: horizontalOffset,
+        viewportWidth: viewportWidth,
+        uiDirection: uiDirection,
         onTap: () => showProgrammeSheet(
           context,
           channel: channel,
@@ -983,21 +1201,108 @@ class _GuideRow extends StatelessWidget {
   }
 }
 
+/// Slides a block's content to the visible side of the viewport as the block
+/// scrolls under the fixed edge. Only edge blocks rebuild while scrolling;
+/// fully visible blocks keep their inset at zero and do no work.
+class _StickyInset extends StatefulWidget {
+  const _StickyInset({
+    required this.offset,
+    required this.left,
+    required this.width,
+    required this.viewportWidth,
+    required this.direction,
+    required this.child,
+  });
+
+  final ValueListenable<double> offset;
+  final double left;
+  final double width;
+  final double viewportWidth;
+  final TextDirection direction;
+  final Widget child;
+
+  @override
+  State<_StickyInset> createState() => _StickyInsetState();
+}
+
+class _StickyInsetState extends State<_StickyInset> {
+  late double _inset = _compute();
+
+  double _compute() {
+    final start = widget.offset.value;
+    final end = start + widget.viewportWidth;
+    final overflow = widget.direction == TextDirection.rtl
+        // Arabic UI: the leading edge of a block is its right side, so keep
+        // the title at the right edge of the visible timeline.
+        ? widget.left + widget.width - end
+        : start - widget.left;
+    return overflow.clamp(0.0, widget.width);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.offset.addListener(_sync);
+  }
+
+  @override
+  void didUpdateWidget(_StickyInset oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.offset != widget.offset) {
+      oldWidget.offset.removeListener(_sync);
+      widget.offset.addListener(_sync);
+    }
+    // The framework builds again right after this callback, so updating the
+    // inset directly avoids a redundant setState during the update phase.
+    _inset = _compute();
+  }
+
+  @override
+  void dispose() {
+    widget.offset.removeListener(_sync);
+    super.dispose();
+  }
+
+  void _sync() {
+    final next = _compute();
+    if ((next - _inset).abs() < 0.5) {
+      return;
+    }
+    setState(() => _inset = next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsetsDirectional.only(start: _inset),
+      child: widget.child,
+    );
+  }
+}
+
 class _ProgrammeBlock extends StatelessWidget {
   const _ProgrammeBlock({
     required this.programme,
     required this.live,
     required this.allowInsecure,
-    required this.showPoster,
     required this.use24HourTime,
+    required this.left,
+    required this.width,
+    required this.horizontalOffset,
+    required this.viewportWidth,
+    required this.uiDirection,
     required this.onTap,
   });
 
   final Programme programme;
   final bool live;
   final bool allowInsecure;
-  final bool showPoster;
   final bool use24HourTime;
+  final double left;
+  final double width;
+  final ValueListenable<double> horizontalOffset;
+  final double viewportWidth;
+  final TextDirection uiDirection;
   final VoidCallback onTap;
 
   @override
@@ -1008,213 +1313,225 @@ class _ProgrammeBlock extends StatelessWidget {
     final border =
         live ? colors.accent.withValues(alpha: 0.65) : colors.surface1;
 
-    return Material(
-      color: background,
-      borderRadius: BorderRadius.circular(9),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: border),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final textScale =
-                  MediaQuery.textScalerOf(context).scale(12) / 12;
-              // Large accessibility font sizes would otherwise push the live
-              // badge, title, subtitle and time past the fixed row height.
-              final detailed =
-                  constraints.maxWidth > 110 && textScale <= 1.2;
-              // Very short programmes leave only a few pixels inside the
-              // block, where an ellipsis reads as missing guide data.
-              final hasText = constraints.maxWidth >= 44;
-              // Only large blocks carry artwork. XMLTV posters are full-size
-              // bitmaps (Tunarr serves ~570 KB each), and a twelve-hour guide
-              // on a phone holds thousands of programmes, so widening this
-              // rule turns the guide into a multi-hundred-megabyte download
-              // that starves playback and playlist refreshes from the same
-              // host.
-              final withPoster = showPoster &&
-                  detailed &&
-                  constraints.maxWidth > 190 &&
-                  textScale <= 1.15;
+    return Directionality(
+      textDirection: uiDirection,
+      child: Material(
+        color: background,
+        borderRadius: BorderRadius.circular(9),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: border),
+            ),
+            child: _StickyInset(
+              offset: horizontalOffset,
+              left: left,
+              width: width,
+              viewportWidth: viewportWidth,
+              direction: uiDirection,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final textScale =
+                      MediaQuery.textScalerOf(context).scale(12) / 12;
+                  // The constraints describe the *visible* slice of the
+                  // block, so a wide programme scrolled mostly off screen
+                  // switches to the compact layout instead of hiding its
+                  // title past the edge.
+                  final detailed =
+                      constraints.maxWidth > 110 && textScale <= 1.2;
+                  // Very short programmes leave only a few pixels inside the
+                  // block, where an ellipsis reads as missing guide data.
+                  final hasText = constraints.maxWidth >= 44;
+                  // Only large visible slices carry artwork. XMLTV posters
+                  // are full-size bitmaps (Tunarr serves ~570 KB each), and a
+                  // long guide on a phone holds thousands of programmes, so
+                  // widening this rule turns the guide into a multi-hundred-
+                  // megabyte download that starves playback and refreshes
+                  // from the same host.
+                  final withPoster = detailed &&
+                      constraints.maxWidth > 190 &&
+                      textScale <= 1.15;
 
-              if (!hasText) {
-                // A sliver cannot fit a label, but it still marks where the
-                // programme sits. Leaving it blank reads as missing guide
-                // data (ErsatzTV airs five-minute programmes, so an entire
-                // channel looked empty at the default zoom). The surrounding
-                // Material already paints the tinted block and the live
-                // accent; return no text and no artwork, because one image
-                // request per short programme would flood the source.
-                return live
-                    ? Align(
-                        alignment: Alignment.center,
-                        child: Container(
-                          width: 5,
-                          height: 5,
-                          decoration: BoxDecoration(
-                            color: colors.accent,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      )
-                    : const SizedBox.expand();
-              }
-
-              final title = BidiText(
-                programme.title,
-                maxLines: detailed ? 2 : 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colors.text,
-                      fontWeight: FontWeight.w600,
-                      height: 1.2,
-                    ),
-              );
-              final subtitle = programme.subTitle == null
-                  ? null
-                  : BidiText(
-                      programme.subTitle!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style:
-                          Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: colors.subtext0,
-                                height: 1.2,
+                  if (!hasText) {
+                    // A sliver cannot fit a label, but it still marks where
+                    // the programme sits. Leaving it blank reads as missing
+                    // guide data (ErsatzTV airs five-minute programmes, so an
+                    // entire channel looked empty at the default zoom). The
+                    // surrounding Material already paints the tinted block
+                    // and the live accent; return no text and no artwork.
+                    return live
+                        ? Align(
+                            alignment: Alignment.center,
+                            child: Container(
+                              width: 5,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: colors.accent,
+                                shape: BoxShape.circle,
                               ),
-                    );
-
-              if (!detailed) {
-                // Even the narrowest readable block carries the sub-title, so
-                // short programmes still show e.g. the episode name.
-                final compactSubtitle = textScale <= 1.8 ? subtitle : null;
-                return Directionality(
-                  textDirection: bidiDirectionOf(programme.title),
-                  child: Stack(
-                    children: <Widget>[
-                      Positioned.fill(
-                        child: Align(
-                          alignment: AlignmentDirectional.centerStart,
-                          child: ClipRect(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                title,
-                                if (compactSubtitle != null) ...<Widget>[
-                                  const SizedBox(height: 1),
-                                  compactSubtitle,
-                                ],
-                              ],
                             ),
-                          ),
-                        ),
-                      ),
-                      if (live)
-                        PositionedDirectional(
-                          top: 0,
-                          end: 0,
-                          child: Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: colors.accent,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              }
+                          )
+                        : const SizedBox.expand();
+                  }
 
-              final text = Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      if (live) ...<Widget>[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colors.accent,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            strings.live,
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelSmall
-                                ?.copyWith(
-                                  color: colors.base,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 8.5,
-                                  height: 1.1,
-                                  letterSpacing: 0.4,
-                                ),
-                          ),
+                  final title = BidiText(
+                    programme.displayTitle,
+                    maxLines: detailed ? 2 : 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.text,
+                          fontWeight: FontWeight.w600,
+                          height: 1.2,
                         ),
-                        const SizedBox(width: 5),
-                      ],
-                      Expanded(
-                        child: Text(
-                          strings.formatRange(
-                            programme.start,
-                            programme.stop,
-                            use24HourTime: use24HourTime,
-                          ),
+                  );
+                  final subtitle = programme.subTitle == null
+                      ? null
+                      : BidiText(
+                          programme.subTitle!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style:
                               Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: colors.subtext0,
+                                    height: 1.2,
+                                  ),
+                        );
+
+                  if (!detailed) {
+                    // Even the narrowest readable block carries the
+                    // sub-title, so short programmes still show e.g. the
+                    // episode name.
+                    final compactSubtitle = textScale <= 1.8 ? subtitle : null;
+                    return Stack(
+                      children: <Widget>[
+                        Positioned.fill(
+                          child: Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: ClipRect(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  title,
+                                  if (compactSubtitle != null) ...<Widget>[
+                                    const SizedBox(height: 1),
+                                    compactSubtitle,
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (live)
+                          PositionedDirectional(
+                            top: 0,
+                            end: 0,
+                            child: Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: colors.accent,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  }
+
+                  final text = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Row(
+                        children: <Widget>[
+                          if (live) ...<Widget>[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colors.accent,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                strings.live,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(
+                                      color: colors.base,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 8.5,
+                                      height: 1.1,
+                                      letterSpacing: 0.4,
+                                    ),
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                          ],
+                          Expanded(
+                            child: Text(
+                              strings.formatRange(
+                                programme.start,
+                                programme.stop,
+                                use24HourTime: use24HourTime,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: uiDirection == TextDirection.rtl
+                                  ? TextAlign.right
+                                  : TextAlign.left,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(
                                     color: colors.overlay0,
                                     fontSize: 9,
                                     fontFeatures: const <FontFeature>[
                                       FontFeature.tabularFigures(),
                                     ],
                                   ),
-                        ),
+                            ),
+                          ),
+                        ],
                       ),
+                      const SizedBox(height: 2),
+                      title,
+                      if (subtitle != null) ...<Widget>[
+                        const SizedBox(height: 1),
+                        subtitle,
+                      ],
                     ],
-                  ),
-                  const SizedBox(height: 2),
-                  title,
-                  if (subtitle != null) ...<Widget>[
-                    const SizedBox(height: 1),
-                    subtitle,
-                  ],
-                ],
-              );
+                  );
 
-              if (!withPoster) {
-                return ClipRect(child: text);
-              }
+                  if (!withPoster) {
+                    return ClipRect(child: text);
+                  }
 
-              return ClipRect(
-                child: Row(
-                  children: <Widget>[
-                    ProgrammePoster(
-                      programme: programme,
-                      allowInsecure: allowInsecure,
-                      width: 54,
-                      height: 74,
-                      radius: 7,
+                  return ClipRect(
+                    child: Row(
+                      children: <Widget>[
+                        ProgrammePoster(
+                          programme: programme,
+                          allowInsecure: allowInsecure,
+                          width: 54,
+                          height: 74,
+                          radius: 7,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(child: text),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(child: text),
-                  ],
-                ),
-              );
-            },
+                  );
+                },
+              ),
+            ),
           ),
         ),
       ),

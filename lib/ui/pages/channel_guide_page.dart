@@ -9,6 +9,7 @@ import '../../l10n/strings.dart';
 import '../player_launcher.dart';
 import '../widgets/channel_logo.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/live_progress_bar.dart';
 import '../widgets/programme_poster.dart';
 import '../widgets/programme_sheet.dart';
 
@@ -284,6 +285,10 @@ class _ProgrammeCard extends StatelessWidget {
                           height: 1.2,
                         ),
                       ),
+                      if (live) ...<Widget>[
+                        const SizedBox(height: 6),
+                        LiveProgressBar(programme: programme, height: 4),
+                      ],
                       if (programme.subTitle != null) ...<Widget>[
                         const SizedBox(height: 2),
                         BidiText(

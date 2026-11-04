@@ -26,6 +26,11 @@ pubspec.lock
 *.iws
 .DS_Store
 
+# Android signing material — never commit these.
+*.jks
+*.keystore
+key.properties
+
 # Local release output
 dist/
 .build/

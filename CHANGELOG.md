@@ -11,11 +11,12 @@ All notable changes to Mojac are documented here. The format follows
 - M3U/M3U8 playlist parsing with `tvg-id`, `tvg-name`, `tvg-chno`, `tvg-logo`,
   `group-title`, `#EXTGRP`, relative locations and advertised `url-tvg`.
 - XMLTV parsing with timezone offsets, `<sub-title>`, descriptions, categories,
-  icons and `episode-num`, limited to a rolling 12-hour-past / 72-hour-future
-  window.
-- 12-hour guide timeline with channel column, live programme highlight, "now"
-  line, programme sheet and 12/24-hour display option.
-- Guide timeline zoom (4-12 px/minute) and lazy row rendering so large
+  icons and `episode-num`, keeping 12 hours of the past plus the selected guide
+  window (12-168 hours) and a margin.
+- Guide timeline with channel column, live programme highlight, "now" line,
+  programme sheet, 12/24-hour display option and a configurable 12-168 hour
+  span.
+- Guide timeline zoom (2-180 px/minute) and lazy row rendering so large
   playlists stay responsive; compact blocks keep programme sub-titles and the
   window rolls back to "now" when it has been open past the displayed span.
 - Channels list shows the next programme's sub-title alongside the current
@@ -32,6 +33,55 @@ All notable changes to Mojac are documented here. The format follows
   bzip2), while host GTK/system libraries (including librsvg) are never
   shadowed.
 - Bundled Noto Sans Arabic font and GPL-3.0-or-later licensing.
+- Tunarr and ErsatzTV source presets. Both only need the server address;
+  Mojac derives `/api/channels.m3u` + `/api/xmltv.xml` or
+  `/iptv/channels.m3u` + `/iptv/xmltv.xml`. IPTV sources still accept explicit
+  playlist and guide locations.
+- Favourites tab with per-channel stars, plus a floating rounded bottom bar on
+  phones. Sources moved into Settings and a quick source switcher stays in the
+  app bar.
+- One search surface for channels, groups and programmes. Programme results
+  carry artwork, sub-title, episode number, channel and air time, and the
+  results are ranked so exact title matches come first.
+- Shared group filter on Channels and Guide, half-hour timeline labels, and a
+  configurable guide window from 12 to 168 hours. Automatic background refresh
+  can run every 15 minutes to 12 hours.
+- Rich XMLTV metadata: every poster/still URL, credits, rating, keywords,
+  year, new/previously-shown flags, and season/episode numbers even when the
+  sub-title omits them. The programme sheet shows the full detail.
+- Audio and subtitle track picker in the built-in player, driven by media_kit's
+  live track streams.
+- Set-top-box style player overlays on the built-in player. A lower-third
+  banner shows the logo, number, clock, what is on now with a live progress
+  line and what is next, fading after eight seconds (or pinned), with group,
+  sleep and track chips. Volume and brightness use a 30-segment level bar, and
+  track, mute, aspect and sleep changes appear as a short message overlay.
+- In-player channel browser: group tabs, what is on now on every row, type-to-
+  search by channel name, group or programme, and tuning without leaving the
+  video. Swiping the picture or pressing the arrow/Page keys surfs channels,
+  and the number keys tune by channel number.
+- Per-channel audio and subtitle memory, with default audio and subtitle
+  languages in Settings (including "subtitles off"). `A` and `J` cycle tracks
+  and the track sheet can restore the defaults.
+- Keyboard controls for the built-in player: space to pause, F/F11 fullscreen,
+  M mute, arrows for volume and channels, C/B browser, S tracks, P picture,
+  Z aspect, T deinterlace, I banner, N sleep timer, D statistics, H/F1 the
+  shortcut card, and `[`/`]` and `,`/`.` for audio and subtitle delays.
+- Picture controls in the player: aspect override, deinterlacing and audio and
+  subtitle delays. "Auto (native)" is a first-class choice that clears mpv's
+  aspect override, so the stream's own ratio comes back after any change;
+  "Fill screen" crops to fill without distorting and "Stretch" fills even when
+  that changes the ratio. "Reset picture" restores every picture control at
+  once.
+- Playback statistics and a diagnostics sheet with the redacted stream URL,
+  codecs, resolution, buffer, dropped frames and a copy-to-clipboard action.
+  Open it with Shift+D or by holding the statistics button. Failed starts now
+  retry quietly twice before any error is shown.
+- Sleep timer with 15, 30, 45, 60, 90 and 120 minute options, or the end of the
+  current programme; playback pauses when it expires.
+- CI now signs the Android APK with a repository-backed upload key, verifies it
+  with `apksigner`, and falls back to debug signing when the secrets are not
+  configured.
 - Native mpv playback on Linux desktops. Channels open in the system mpv's
   own window, so video is decoded on the GPU, fullscreen is real instead of
   filling the app window, and mpv's usual controls and the user's own mpv
@@ -44,6 +94,14 @@ All notable changes to Mojac are documented here. The format follows
 
 ### Changed
 
+- The guide opens at 5.4 px/minute (35% denser than the old default) and zooms
+  from 2 to 180 px/minute. The zoom slider is logarithmic so the useful short-
+  programme range gets most of the travel, and `Ctrl`/`⌘` + scroll zooms around
+  the centre of the viewport.
+- Programme text sticks to the visible edge of its block while the timeline
+  scrolls: left in LTR and right in Arabic. Blocks are culled and rebuilt
+  around the real viewport, so week-long windows and deep zoom no longer build
+  thousands of off-screen widgets.
 - Channel artwork is larger in both the channel list and the guide. The
   channel number now rides on the logo corner as a small badge instead of
   taking a text column, and the guide's channel column is logo-only.

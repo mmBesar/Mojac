@@ -32,6 +32,7 @@ class AppState extends ChangeNotifier {
   final PlaylistLoader _loader;
   Timer? _ticker;
   int _loadGeneration = 0;
+  DateTime? _lastAutoRefresh;
 
   late AppSettings _settings;
   List<SourceConfig> _sources = <SourceConfig>[];
@@ -87,6 +88,7 @@ class AppState extends ChangeNotifier {
     _ticker = Timer.periodic(const Duration(seconds: 30), (_) {
       _now = DateTime.now();
       notifyListeners();
+      unawaited(_autoRefreshIfDue());
     });
     notifyListeners();
 
@@ -94,6 +96,27 @@ class AppState extends ChangeNotifier {
       _initialLoadStarted = true;
       unawaited(load());
     }
+  }
+
+  /// Refreshes quietly when the interval chosen in Settings has elapsed. The
+  /// ticker calls this, so changing the interval needs no timer restart.
+  Future<void> _autoRefreshIfDue() async {
+    final minutes = _settings.refreshMinutes;
+    if (minutes <= 0 || _loading || activeSource == null) {
+      return;
+    }
+    // Track attempts separately from the content's timestamp: a network
+    // failure returns the old cache, whose loadedAt would otherwise make the
+    // next thirty-second tick retry immediately and hammer a downed host.
+    final last = _lastAutoRefresh ?? _content?.loadedAt;
+    if (last == null) {
+      return;
+    }
+    if (DateTime.now().difference(last) < Duration(minutes: minutes)) {
+      return;
+    }
+    _lastAutoRefresh = DateTime.now();
+    await load();
   }
 
   Future<void> load() async {
@@ -113,7 +136,10 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final content = await _loader.load(source);
+      final content = await _loader.load(
+        source,
+        guideHours: _settings.guideHours,
+      );
       if (generation != _loadGeneration) {
         return;
       }
@@ -152,7 +178,12 @@ class AppState extends ChangeNotifier {
     if (!exists) {
       return;
     }
-    _settings = _settings.copyWith(activeSourceId: sourceId);
+    _settings = _settings.copyWith(
+      activeSourceId: sourceId,
+      // Groups are playlist-specific; keeping the old one would hide every
+      // channel on the new source.
+      groupFilter: null,
+    );
     _content = null;
     _warnings = <LoadWarning>{};
     _error = null;
@@ -163,7 +194,10 @@ class AppState extends ChangeNotifier {
 
   Future<void> addSource(SourceConfig source) async {
     _sources = <SourceConfig>[..._sources, source];
-    _settings = _settings.copyWith(activeSourceId: source.id);
+    _settings = _settings.copyWith(
+      activeSourceId: source.id,
+      groupFilter: null,
+    );
     await _storage.saveSources(_sources);
     await _storage.saveSettings(_settings);
     _content = null;
@@ -235,7 +269,128 @@ class AppState extends ChangeNotifier {
     return updateSettings(_settings.copyWith(nativePlayer: value));
   }
 
-  Future<SourceContent> probe(SourceConfig source) => _loader.probe(source);
+  Future<void> setGuideHours(int hours) async {
+    final clamped = hours.clamp(12, 168).toInt();
+    if (_settings.guideHours == clamped) {
+      return;
+    }
+    await updateSettings(_settings.copyWith(guideHours: clamped));
+    unawaited(load());
+  }
+
+  Future<void> setRefreshMinutes(int minutes) {
+    return updateSettings(
+      _settings.copyWith(refreshMinutes: minutes.clamp(0, 24 * 60).toInt()),
+    );
+  }
+
+  Future<void> setShowChannelBanner(bool value) {
+    return updateSettings(_settings.copyWith(showChannelBanner: value));
+  }
+
+  Future<void> setDefaultAudioLanguage(String? language) {
+    return updateSettings(
+      _settings.copyWith(defaultAudioLanguage: _language(language)),
+    );
+  }
+
+  Future<void> setDefaultSubtitleLanguage(String? language) {
+    return updateSettings(
+      _settings.copyWith(defaultSubtitleLanguage: _language(language)),
+    );
+  }
+
+  String? _language(String? value) {
+    final trimmed = value?.trim().toLowerCase();
+    if (trimmed == null || trimmed.isEmpty || trimmed == 'auto') {
+      return null;
+    }
+    return trimmed;
+  }
+
+  Future<void> setPlayerVolume(double volume) {
+    final clamped = volume.clamp(0, 100).toDouble();
+    if ((_settings.playerVolume - clamped).abs() < 0.01) {
+      return Future<void>.value();
+    }
+    return updateSettings(_settings.copyWith(playerVolume: clamped));
+  }
+
+  Future<void> setPlayerAspect(String aspect) {
+    if (!kPlayerAspects.contains(aspect)) {
+      return Future<void>.value();
+    }
+    return updateSettings(_settings.copyWith(playerAspect: aspect));
+  }
+
+  Future<void> setPlayerDeinterlace(String mode) {
+    if (!kPlayerDeinterlaceModes.contains(mode)) {
+      return Future<void>.value();
+    }
+    return updateSettings(_settings.copyWith(playerDeinterlace: mode));
+  }
+
+  /// Remembers the audio and subtitle track picked for one channel. The map is
+  /// capped so a long-lived install cannot grow the settings blob forever;
+  /// Dart maps keep insertion order, so the oldest channel is dropped first.
+  Future<void> rememberChannelTracks(
+    String channelId, {
+    required String audioId,
+    required String subtitleId,
+  }) {
+    final value = '$audioId|$subtitleId';
+    if (_settings.channelTracks[channelId] == value) {
+      return Future<void>.value();
+    }
+    final tracks = Map<String, String>.from(_settings.channelTracks);
+    tracks.remove(channelId);
+    tracks[channelId] = value;
+    if (tracks.length > 400) {
+      tracks.remove(tracks.keys.first);
+    }
+    return updateSettings(_settings.copyWith(channelTracks: tracks));
+  }
+
+  Future<void> forgetChannelTracks(String channelId) {
+    if (!_settings.channelTracks.containsKey(channelId)) {
+      return Future<void>.value();
+    }
+    final tracks = Map<String, String>.from(_settings.channelTracks)
+      ..remove(channelId);
+    return updateSettings(_settings.copyWith(channelTracks: tracks));
+  }
+
+  /// Group chips on Channels and Guide share this value, so picking a group on
+  /// one page filters the other too.
+  Future<void> setGroupFilter(String? group) {
+    final normalized = group == null || group.trim().isEmpty
+        ? null
+        : group.trim();
+    if (_settings.groupFilter == normalized) {
+      return Future<void>.value();
+    }
+    return updateSettings(_settings.copyWith(groupFilter: normalized));
+  }
+
+  bool isFavorite(String channelId) =>
+      _settings.favoriteChannelIds.contains(channelId);
+
+  List<Channel> get favoriteChannels => channels
+      .where((channel) => isFavorite(channel.id))
+      .toList(growable: false);
+
+  Future<void> toggleFavorite(String channelId) async {
+    final favorites = _settings.favoriteChannelIds.toList(growable: true);
+    if (!favorites.remove(channelId)) {
+      favorites.insert(0, channelId);
+    }
+    await updateSettings(
+      _settings.copyWith(favoriteChannelIds: favorites),
+    );
+  }
+
+  Future<SourceContent> probe(SourceConfig source) =>
+      _loader.probe(source, guideHours: _settings.guideHours);
 
   String _messageFor(Object error) {
     if (error is SourceLoadException) {

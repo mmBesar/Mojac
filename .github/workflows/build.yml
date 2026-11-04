@@ -66,8 +66,54 @@ jobs:
       - name: Create platform shells
         run: tool/bootstrap.sh
 
+      - name: Configure APK signing
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [[ -z "${ANDROID_KEYSTORE_B64}" ]]; then
+            echo "::warning::ANDROID_KEYSTORE_B64 is not set; the APK will be debug-signed."
+            exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/signing"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode \
+            > "$RUNNER_TEMP/signing/mojac.jks"
+          {
+            printf 'storeFile=%s\n' "$RUNNER_TEMP/signing/mojac.jks"
+            printf 'storePassword=%s\n' "$ANDROID_KEYSTORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
+          } > android/key.properties
+          chmod 600 android/key.properties "$RUNNER_TEMP/signing/mojac.jks"
+
       - name: Build release APK
         run: flutter build apk --release --target-platform android-arm64
+
+      - name: Verify APK signature
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [[ -z "${ANDROID_KEYSTORE_B64}" ]]; then
+            echo "No signing secrets; skipping signature verification."
+            exit 0
+          fi
+          sdk="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          apksigner="$(find "$sdk/build-tools" -name apksigner -type f \
+            | sort -V | tail -n1)"
+          if [[ ! -x "$apksigner" ]]; then
+            echo "::error::apksigner was not found under $sdk/build-tools"
+            exit 1
+          fi
+          "$apksigner" verify --print-certs \
+            build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Remove signing material
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/signing"
+          rm -f android/key.properties
 
       - name: Rename APK for release
         run: |

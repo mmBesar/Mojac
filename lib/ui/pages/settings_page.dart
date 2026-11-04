@@ -13,6 +13,38 @@ import '../../data/models.dart';
 import '../../l10n/strings.dart';
 import '../../player/mpv_client.dart';
 
+/// Languages offered for the default audio and subtitle tracks. Servers often
+/// tag tracks with two-letter codes, so that is what the picker stores; the
+/// player also matches full names in track titles.
+const List<String> _languageCodes = <String>[
+  'en',
+  'ar',
+  'fr',
+  'es',
+  'de',
+  'it',
+  'pt',
+  'ru',
+  'tr',
+  'fa',
+  'ur',
+  'hi',
+  'bn',
+  'id',
+  'ms',
+  'zh',
+  'ja',
+  'ko',
+];
+
+const List<String> _audioLanguages = <String>['auto', ..._languageCodes];
+
+const List<String> _subtitleLanguages = <String>[
+  'auto',
+  'off',
+  ..._languageCodes,
+];
+
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key, required this.onOpenSources});
 
@@ -152,41 +184,136 @@ class SettingsPage extends StatelessWidget {
                     ),
                   ],
                 ),
-                // The switch only matters when a system mpv is installed;
-                // without one the launcher falls back to the built-in player.
-                if (Platform.isLinux && MpvClient.resolveBinary() != null)
-                  _Section(
-                    title: strings.playback,
-                    children: <Widget>[
-                      SwitchListTile(
-                        value: settings.nativePlayer,
-                        onChanged: (value) =>
-                            unawaited(state.setNativePlayer(value)),
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(strings.nativePlayer),
-                        subtitle: Text(
-                          strings.nativePlayerHelp,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: colors.subtext0,
-                                  ),
-                        ),
+                _Section(
+                  title: strings.sources,
+                  children: <Widget>[
+                    if (state.sources.isEmpty)
+                      Text(
+                        strings.noSourcesBody,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: colors.subtext0,
+                              height: 1.4,
+                            ),
+                      )
+                    else ...<Widget>[
+                      _InfoRow(
+                        icon: Icons.dns_rounded,
+                        label: strings.activeSource,
+                        value: state.activeSource?.name ??
+                            strings.noActiveSource,
+                      ),
+                      _InfoRow(
+                        icon: Icons.layers_rounded,
+                        label: strings.sourceType,
+                        value: state.activeSource?.provider.label ??
+                            strings.notConfigured,
+                      ),
+                      _InfoRow(
+                        icon: Icons.calendar_month_rounded,
+                        label: strings.guideSource,
+                        value: state.xmltvLocation ?? strings.notConfigured,
                       ),
                     ],
-                  ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: <Widget>[
+                        FilledButton.tonalIcon(
+                          onPressed: onOpenSources,
+                          icon: const Icon(Icons.tune_rounded, size: 18),
+                          label: Text(strings.manageSources),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      strings.sourcesHelp,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: colors.subtext0,
+                            height: 1.4,
+                          ),
+                    ),
+                  ],
+                ),
+                _Section(
+                  title: strings.playback,
+                  children: <Widget>[
+                    SwitchListTile(
+                      value: settings.showChannelBanner,
+                      onChanged: (value) =>
+                          unawaited(state.setShowChannelBanner(value)),
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(strings.channelBanner),
+                      subtitle: Text(
+                        strings.channelBannerHelp,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: colors.subtext0,
+                            ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _SelectField<String>(
+                      icon: Icons.graphic_eq_rounded,
+                      label: strings.defaultAudioLanguage,
+                      help: strings.defaultAudioHelp,
+                      value: settings.defaultAudioLanguage ?? 'auto',
+                      items: _audioLanguages,
+                      itemLabel: strings.languageName,
+                      onChanged: (value) => unawaited(
+                        state.setDefaultAudioLanguage(
+                          value == 'auto' ? null : value,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    _SelectField<String>(
+                      icon: Icons.subtitles_rounded,
+                      label: strings.defaultSubtitles,
+                      help: strings.defaultSubtitlesHelp,
+                      value: settings.defaultSubtitleLanguage ?? 'auto',
+                      items: _subtitleLanguages,
+                      itemLabel: strings.languageName,
+                      onChanged: (value) => unawaited(
+                        state.setDefaultSubtitleLanguage(
+                          value == 'auto' ? null : value,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      strings.playerSettingsHelp,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: colors.subtext0,
+                            height: 1.4,
+                          ),
+                    ),
+                    // The switch only matters when a system mpv is installed;
+                    // without one the launcher falls back to the built-in
+                    // player.
+                    if (Platform.isLinux && MpvClient.resolveBinary() != null)
+                      ...<Widget>[
+                        const Divider(height: 28),
+                        SwitchListTile(
+                          value: settings.nativePlayer,
+                          onChanged: (value) =>
+                              unawaited(state.setNativePlayer(value)),
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(strings.nativePlayer),
+                          subtitle: Text(
+                            strings.nativePlayerHelp,
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: colors.subtext0,
+                                    ),
+                          ),
+                        ),
+                      ],
+                  ],
+                ),
                 _Section(
                   title: strings.dataAndGuide,
                   children: <Widget>[
-                    _InfoRow(
-                      icon: Icons.dns_rounded,
-                      label: strings.activeSource,
-                      value: state.activeSource?.name ?? strings.noActiveSource,
-                    ),
-                    _InfoRow(
-                      icon: Icons.calendar_month_rounded,
-                      label: strings.guideSource,
-                      value: state.xmltvLocation ?? strings.notConfigured,
-                    ),
                     _InfoRow(
                       icon: Icons.schedule_rounded,
                       label: strings.lastUpdated,
@@ -203,6 +330,30 @@ class SettingsPage extends StatelessWidget {
                             '${strings.channelCount(state.channels.length)} · '
                             '${strings.programmeCount(state.epg.programmeCount)}',
                       ),
+                    const SizedBox(height: 4),
+                    _SelectField<int>(
+                      icon: Icons.view_timeline_rounded,
+                      label: strings.guideWindow,
+                      help: strings.guideWindowHelp,
+                      value: settings.guideHours,
+                      items: const <int>[12, 24, 48, 72, 96, 168],
+                      itemLabel: strings.guideHoursLabel,
+                      onChanged: (value) =>
+                          unawaited(state.setGuideHours(value)),
+                    ),
+                    const SizedBox(height: 16),
+                    _SelectField<int>(
+                      icon: Icons.autorenew_rounded,
+                      label: strings.autoRefresh,
+                      help: strings.autoRefreshHelp,
+                      value: settings.refreshMinutes,
+                      items: const <int>[0, 15, 30, 60, 180, 360, 720],
+                      itemLabel: (minutes) => minutes == 0
+                          ? strings.refreshOff
+                          : strings.refreshEvery(minutes),
+                      onChanged: (value) =>
+                          unawaited(state.setRefreshMinutes(value)),
+                    ),
                     const SizedBox(height: 14),
                     Wrap(
                       spacing: 10,
@@ -222,11 +373,6 @@ class SettingsPage extends StatelessWidget {
                           label: Text(
                             state.isLoading ? strings.refreshing : strings.refresh,
                           ),
-                        ),
-                        TextButton.icon(
-                          onPressed: onOpenSources,
-                          icon: const Icon(Icons.dns_rounded, size: 18),
-                          label: Text(strings.sources),
                         ),
                       ],
                     ),
@@ -511,6 +657,75 @@ class _AccentDot extends StatelessWidget {
               : null,
         ),
       ),
+    );
+  }
+}
+
+class _SelectField<T> extends StatelessWidget {
+  const _SelectField({
+    required this.icon,
+    required this.label,
+    required this.help,
+    required this.value,
+    required this.items,
+    required this.itemLabel,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String label;
+  final String help;
+  final T value;
+  final List<T> items;
+  final String Function(T value) itemLabel;
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.mojacColors;
+    // Stored settings are clamped, not restricted to the offered presets, so
+    // an older value still gets a menu entry instead of tripping the dropdown
+    // assertion.
+    final options = items.contains(value) ? items : <T>[value, ...items];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _FieldLabel(text: label),
+        const SizedBox(height: 6),
+        InputDecorator(
+          decoration: InputDecoration(
+            prefixIcon: Icon(icon),
+            isDense: true,
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<T>(
+              value: value,
+              isExpanded: true,
+              isDense: true,
+              items: <DropdownMenuItem<T>>[
+                for (final option in options)
+                  DropdownMenuItem<T>(
+                    value: option,
+                    child: Text(itemLabel(option)),
+                  ),
+              ],
+              onChanged: (next) {
+                if (next != null) {
+                  onChanged(next);
+                }
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          help,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colors.subtext0,
+                height: 1.4,
+              ),
+        ),
+      ],
     );
   }
 }

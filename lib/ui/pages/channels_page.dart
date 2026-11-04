@@ -1,16 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/bidi.dart';
 import '../../core/theme.dart';
 import '../../data/app_state.dart';
 import '../../data/models.dart';
 import '../../l10n/strings.dart';
 import '../player_launcher.dart';
-import '../widgets/channel_logo.dart';
+import '../widgets/channel_tile.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/error_banner.dart';
-import '../widgets/programme_summary.dart';
+import '../widgets/group_filter_bar.dart';
 import '../widgets/warnings_panel.dart';
 import 'channel_guide_page.dart';
 
@@ -25,7 +26,6 @@ class ChannelsPage extends StatefulWidget {
 
 class _ChannelsPageState extends State<ChannelsPage> {
   final TextEditingController _search = TextEditingController();
-  String? _group;
 
   @override
   void dispose() {
@@ -76,8 +76,24 @@ class _ChannelsPageState extends State<ChannelsPage> {
       );
     }
 
-    final channels = _filtered(state.channels);
-    final groups = _groups(state.channels);
+    final allChannels = state.channels;
+    if (allChannels.isEmpty) {
+      return EmptyState(
+        icon: Icons.live_tv_rounded,
+        title: strings.noChannels,
+        body: strings.noChannelsBody,
+        actionLabel: strings.refresh,
+        onAction: () => state.refresh(),
+        secondaryLabel: strings.sources,
+        onSecondary: widget.onAddSource,
+      );
+    }
+
+    final groups = channelGroups(allChannels);
+    final group = groups.contains(state.settings.groupFilter)
+        ? state.settings.groupFilter
+        : null;
+    final channels = _filtered(allChannels, group);
     final allowInsecure = state.activeSource?.allowInsecureCerts ?? false;
 
     return Column(
@@ -127,27 +143,11 @@ class _ChannelsPageState extends State<ChannelsPage> {
             ],
           ),
         ),
-        if (groups.length > 1)
-          SizedBox(
-            height: 42,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: <Widget>[
-                _GroupChip(
-                  label: strings.allGroups,
-                  selected: _group == null,
-                  onSelected: () => setState(() => _group = null),
-                ),
-                for (final group in groups)
-                  _GroupChip(
-                    label: group,
-                    selected: _group == group,
-                    onSelected: () => setState(() => _group = group),
-                  ),
-              ],
-            ),
-          ),
+        GroupFilterBar(
+          groups: groups,
+          selected: group,
+          onChanged: (value) => unawaited(state.setGroupFilter(value)),
+        ),
         if (state.warnings.isNotEmpty)
           WarningsPanel(warnings: state.warnings),
         if (state.error != null && state.hasContent)
@@ -159,13 +159,19 @@ class _ChannelsPageState extends State<ChannelsPage> {
         Expanded(
           child: channels.isEmpty
               ? EmptyState(
-                  icon: Icons.search_off_rounded,
-                  title: strings.noSearchResults,
+                  icon: group == null
+                      ? Icons.search_off_rounded
+                      : Icons.filter_alt_off_rounded,
+                  title: group == null
+                      ? strings.noSearchResults
+                      : strings.noGroupChannels,
                   body: strings.noChannelsBody,
-                  actionLabel: strings.clearSearch,
+                  actionLabel:
+                      group == null ? strings.clearSearch : strings.allGroups,
                   onAction: () {
                     _search.clear();
-                    setState(() => _group = null);
+                    setState(() {});
+                    unawaited(state.setGroupFilter(null));
                   },
                 )
               : RefreshIndicator(
@@ -175,14 +181,17 @@ class _ChannelsPageState extends State<ChannelsPage> {
                     itemCount: channels.length,
                     itemBuilder: (context, index) {
                       final channel = channels[index];
-                      return _ChannelTile(
+                      return ChannelTile(
                         channel: channel,
                         epg: state.epg,
                         now: state.now,
                         use24HourTime: state.settings.use24HourTime,
                         allowInsecure: allowInsecure,
+                        favorite: state.isFavorite(channel.id),
                         onPlay: () => _openPlayer(channel),
                         onGuide: () => _openGuide(channel),
+                        onToggleFavorite: () =>
+                            unawaited(state.toggleFavorite(channel.id)),
                       );
                     },
                   ),
@@ -192,10 +201,10 @@ class _ChannelsPageState extends State<ChannelsPage> {
     );
   }
 
-  List<Channel> _filtered(List<Channel> channels) {
+  List<Channel> _filtered(List<Channel> channels, String? group) {
     final query = _search.text.trim().toLowerCase();
     return channels.where((channel) {
-      if (_group != null && channel.group != _group) {
+      if (group != null && channel.group != group) {
         return false;
       }
       if (query.isEmpty) {
@@ -205,188 +214,6 @@ class _ChannelsPageState extends State<ChannelsPage> {
           channel.number.toLowerCase().contains(query) ||
           (channel.group?.toLowerCase().contains(query) ?? false);
     }).toList(growable: false);
-  }
-
-  List<String> _groups(List<Channel> channels) {
-    final values = <String>{
-      for (final channel in channels)
-        if (channel.group != null && channel.group!.trim().isNotEmpty)
-          channel.group!.trim(),
-    }.toList()
-      ..sort();
-    return values;
-  }
-}
-
-class _GroupChip extends StatelessWidget {
-  const _GroupChip({
-    required this.label,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.mojacColors;
-    return Padding(
-      padding: const EdgeInsetsDirectional.only(end: 8),
-      child: Material(
-        color: selected ? colors.accentSoft : colors.surface0,
-        borderRadius: BorderRadius.circular(999),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(999),
-          onTap: onSelected,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            child: BidiText(
-              label,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: selected ? colors.accent : colors.subtext0,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ChannelTile extends StatelessWidget {
-  const _ChannelTile({
-    required this.channel,
-    required this.epg,
-    required this.now,
-    required this.use24HourTime,
-    required this.allowInsecure,
-    required this.onPlay,
-    required this.onGuide,
-  });
-
-  final Channel channel;
-  final EpgData epg;
-  final DateTime now;
-  final bool use24HourTime;
-  final bool allowInsecure;
-  final VoidCallback onPlay;
-  final VoidCallback onGuide;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.mojacColors;
-    final theme = Theme.of(context);
-    final strings = context.strings;
-    final rtl = Directionality.of(context) == TextDirection.rtl;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: colors.surface0,
-        borderRadius: BorderRadius.circular(14),
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
-          child: Row(
-            children: <Widget>[
-              // Tapping the logo starts playback; the schedule below opens the
-              // channel's own guide. Keeping the actions on their own targets
-              // avoids the old trailing play button taking up list space.
-              Tooltip(
-                message: strings.watchLive,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: onPlay,
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: SizedBox(
-                      width: 64,
-                      height: 64,
-                      child: Stack(
-                        children: <Widget>[
-                          ChannelLogo(
-                            channel: channel,
-                            allowInsecure: allowInsecure,
-                            size: 64,
-                            radius: 14,
-                          ),
-                          // The number used to sit in its own 32px column,
-                          // which left the artwork looking cramped. It now
-                          // rides on the logo corner instead.
-                          if (channel.number.isNotEmpty)
-                            PositionedDirectional(
-                              start: 2,
-                              bottom: 2,
-                              child: ChannelNumberBadge(
-                                number: channel.displayNumber,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Padding(
-                      padding: const EdgeInsetsDirectional.only(start: 6),
-                      child: BidiText(
-                        channel.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: colors.text,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: onGuide,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 4,
-                        ),
-                        child: Row(
-                          children: <Widget>[
-                            Expanded(
-                              child: ProgrammeSummary(
-                                channel: channel,
-                                epg: epg,
-                                now: now,
-                                use24HourTime: use24HourTime,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              rtl
-                                  ? Icons.chevron_left_rounded
-                                  : Icons.chevron_right_rounded,
-                              size: 18,
-                              color: colors.overlay0,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 

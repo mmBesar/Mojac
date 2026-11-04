@@ -98,17 +98,29 @@ class XmltvParser {
         continue;
       }
 
-      final categories = element
-          .findAllElements('category')
-          .map((node) => node.innerText.trim())
-          .where((value) => value.isNotEmpty)
-          .toList(growable: false);
-      final icon = element
-          .findAllElements('icon')
-          .map((node) => node.getAttribute('src')?.trim())
-          .whereType<String>()
-          .where((value) => value.isNotEmpty)
-          .firstOrNull;
+      final categories = _texts(element, 'category');
+      // Tunarr and ErsatzTV both publish several <icon> tags per programme
+      // (poster and still). Keeping every URL lets the detail sheet try the
+      // next image when one fails, without widening the guide's artwork gate.
+      final images = <String>[];
+      for (final node in element.findAllElements('icon')) {
+        final src = node.getAttribute('src')?.trim();
+        if (src != null && src.isNotEmpty && !images.contains(src)) {
+          images.add(src);
+        }
+      }
+      // Some XMLTV feeds use <image> instead of the older <icon> spelling.
+      for (final node in element.findAllElements('image')) {
+        final src = node.innerText.trim();
+        if (src.isNotEmpty && !images.contains(src)) {
+          images.add(src);
+        }
+      }
+      final numbering = _episodeNumbering(element);
+      final rating = _firstElement(element, 'rating');
+      final ratingValue = rating == null
+          ? null
+          : _optionalChildText(rating, 'value') ?? _optionalOwnText(rating);
 
       byChannel.putIfAbsent(internalId, () => <Programme>[]).add(
             Programme(
@@ -119,8 +131,18 @@ class XmltvParser {
               subTitle: _optionalText(element, 'sub-title'),
               description: _optionalText(element, 'desc'),
               categories: categories,
-              iconUrl: icon,
-              episode: _episodeNumber(element),
+              images: List<String>.unmodifiable(images),
+              episode: numbering.label,
+              season: numbering.season,
+              episodeNumber: numbering.episode,
+              credits: _credits(element),
+              rating: ratingValue,
+              ratingSystem: rating?.getAttribute('system')?.trim(),
+              keywords: _texts(element, 'keyword'),
+              year: _year(element),
+              previouslyShown:
+                  element.findElements('previously-shown').isNotEmpty,
+              newEpisode: element.findElements('new').isNotEmpty,
             ),
           );
     }
@@ -151,7 +173,75 @@ class XmltvParser {
     return null;
   }
 
-  static String? _episodeNumber(XmlElement element) {
+  static List<String> _texts(XmlElement element, String name) {
+    return element
+        .findAllElements(name)
+        .map((node) => node.innerText.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  static XmlElement? _firstElement(XmlElement element, String name) {
+    for (final node in element.findElements(name)) {
+      return node;
+    }
+    return null;
+  }
+
+  static String? _optionalChildText(XmlElement element, String name) {
+    for (final node in element.findElements(name)) {
+      final value = node.innerText.trim();
+      if (value.isNotEmpty) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  /// Text directly inside [element], ignoring nested elements such as
+  /// `<rating><value>...</value></rating>`.
+  static String? _optionalOwnText(XmlElement element) {
+    for (final node in element.children) {
+      if (node is XmlText) {
+        final value = node.value.trim();
+        if (value.isNotEmpty) {
+          return value;
+        }
+      }
+    }
+    return null;
+  }
+
+  static ProgrammeCredits _credits(XmlElement programme) {
+    final credits = _firstElement(programme, 'credits');
+    if (credits == null) {
+      return const ProgrammeCredits();
+    }
+    return ProgrammeCredits(
+      directors: _texts(credits, 'director'),
+      writers: _texts(credits, 'writer'),
+      producers: _texts(credits, 'producer'),
+      composers: _texts(credits, 'composer'),
+      presenters: _texts(credits, 'presenter'),
+      actors: _texts(credits, 'actor'),
+      guests: _texts(credits, 'guest'),
+    );
+  }
+
+  /// XMLTV's `<date>` is usually just a year, but some feeds put a full date.
+  static int? _year(XmlElement element) {
+    final raw = _optionalText(element, 'date');
+    if (raw == null) {
+      return null;
+    }
+    final match = RegExp(r'\b(\d{4})\b').firstMatch(raw);
+    return match == null ? null : int.tryParse(match.group(1)!);
+  }
+
+  static _EpisodeNumbering _episodeNumbering(XmlElement element) {
+    String? onscreen;
+    int? xmltvSeason;
+    int? xmltvEpisode;
     for (final node in element.findElements('episode-num')) {
       final system = node.getAttribute('system')?.toLowerCase() ?? '';
       final value = node.innerText.trim();
@@ -159,25 +249,47 @@ class XmltvParser {
         continue;
       }
       if (system == 'onscreen') {
-        return value;
+        onscreen ??= value;
+        continue;
       }
       if (system == 'xmltv_ns' || system.isEmpty) {
         final parts = value.split('/').first.split('.');
-        final season = _parseIndex(parts, 0);
-        final episode = _parseIndex(parts, 1);
-        if (season != null || episode != null) {
-          final buffer = StringBuffer();
-          if (season != null) {
-            buffer.write('S${season.toString().padLeft(2, '0')}');
-          }
-          if (episode != null) {
-            buffer.write('E${episode.toString().padLeft(2, '0')}');
-          }
-          return buffer.toString();
-        }
+        xmltvSeason ??= _parseIndex(parts, 0);
+        xmltvEpisode ??= _parseIndex(parts, 1);
       }
     }
-    return null;
+
+    if (onscreen != null) {
+      // Pull the numbers out of "S01E05" style labels too, so details can
+      // show a season/episode line even when only the on-screen label exists.
+      final match = RegExp(r'S(\d+)\s*E(\d+)', caseSensitive: false)
+          .firstMatch(onscreen);
+      final season = xmltvSeason ??
+          (match == null ? null : int.tryParse(match.group(1)!));
+      final episode = xmltvEpisode ??
+          (match == null ? null : int.tryParse(match.group(2)!));
+      return _EpisodeNumbering(
+        label: onscreen,
+        season: season,
+        episode: episode,
+      );
+    }
+
+    if (xmltvSeason == null && xmltvEpisode == null) {
+      return const _EpisodeNumbering();
+    }
+    final buffer = StringBuffer();
+    if (xmltvSeason != null) {
+      buffer.write('S${xmltvSeason.toString().padLeft(2, '0')}');
+    }
+    if (xmltvEpisode != null) {
+      buffer.write('E${xmltvEpisode.toString().padLeft(2, '0')}');
+    }
+    return _EpisodeNumbering(
+      label: buffer.toString(),
+      season: xmltvSeason,
+      episode: xmltvEpisode,
+    );
   }
 
   static int? _parseIndex(List<String> parts, int index) {
@@ -191,6 +303,14 @@ class XmltvParser {
     final parsed = int.tryParse(value);
     return parsed == null ? null : parsed + 1;
   }
+}
+
+class _EpisodeNumbering {
+  const _EpisodeNumbering({this.label, this.season, this.episode});
+
+  final String? label;
+  final int? season;
+  final int? episode;
 }
 
 /// XMLTV timestamps look like `20261028142553 +0000`. Seconds and the zone

@@ -17,6 +17,13 @@ void main() {
       language: AppLanguage.arabic,
       use24HourTime: true,
       activeSourceId: 'home',
+      showChannelBanner: false,
+      defaultAudioLanguage: 'ar',
+      defaultSubtitleLanguage: 'off',
+      playerVolume: 42,
+      playerAspect: '4:3',
+      playerDeinterlace: 'on',
+      channelTracks: <String, String>{'home_1': '2|no'},
     );
     await storage.saveSettings(settings);
 
@@ -26,6 +33,13 @@ void main() {
     expect(loaded.language, AppLanguage.arabic);
     expect(loaded.use24HourTime, isTrue);
     expect(loaded.activeSourceId, 'home');
+    expect(loaded.showChannelBanner, isFalse);
+    expect(loaded.defaultAudioLanguage, 'ar');
+    expect(loaded.defaultSubtitleLanguage, 'off');
+    expect(loaded.playerVolume, 42);
+    expect(loaded.playerAspect, '4:3');
+    expect(loaded.playerDeinterlace, 'on');
+    expect(loaded.channelTracks, <String, String>{'home_1': '2|no'});
 
     final source = SourceConfig(
       id: 'home',
@@ -56,5 +70,22 @@ void main() {
 
     expect(storage.loadSettings().themeFamily, ThemeFamily.system);
     expect(storage.loadSources(), isEmpty);
+  });
+
+  test('player settings are clamped and validated', () {
+    final decoded = AppSettings.fromJson(<String, dynamic>{
+      'playerVolume': 900,
+      'playerAspect': '11:9',
+      'playerDeinterlace': 'sometimes',
+      'channelTracks': <String, dynamic>{
+        'ok': '0|no',
+        'empty': '',
+        'wrong-type': 42,
+      },
+    });
+    expect(decoded.playerVolume, 100);
+    expect(decoded.playerAspect, 'auto');
+    expect(decoded.playerDeinterlace, 'auto');
+    expect(decoded.channelTracks, <String, String>{'ok': '0|no'});
   });
 }

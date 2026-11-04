@@ -184,12 +184,62 @@ To cut a release:
 
 ### Signing the Android APK
 
-The checked-in Gradle configuration is Flutter's template, so release APKs are
-signed with the debug keystore. That is intentional for sideloadable builds but
-is **not** Play Store ready. To sign with your own key, add a `key.properties`
-and signing config to the generated `android/app/build.gradle(.kts)` after
-running `tool/bootstrap.sh`, and provide the keystore as a CI secret. Never
-commit the keystore or its passwords.
+`tool/configure_platforms.py` adds an optional release signing config to the
+generated Gradle file. It reads `android/key.properties` when that file exists
+and otherwise falls back to Flutter's debug signing, so local builds keep
+working without secrets.
+
+Create the upload key once:
+
+```bash
+keytool -genkeypair -v \
+  -keystore mojac.jks \
+  -alias mojac \
+  -keyalg RSA -keysize 4096 -validity 10000
+```
+
+Back the `.jks` file up in at least two places and keep the passwords in a
+password manager. A lost upload key can only be replaced through Play Console
+support; a leaked one lets someone publish as you. Never commit the keystore,
+`key.properties`, or the passwords.
+
+Add these four repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+| --- | --- |
+| `ANDROID_KEYSTORE_B64` | The `.jks` file, base64-encoded |
+| `ANDROID_KEYSTORE_PASSWORD` | The keystore password |
+| `ANDROID_KEY_ALIAS` | `mojac` (or the alias you chose) |
+| `ANDROID_KEY_PASSWORD` | The key password |
+
+Encode the keystore without line wrapping:
+
+```bash
+base64 --wrap=0 mojac.jks > mojac.jks.b64
+# copy the file contents into the ANDROID_KEYSTORE_B64 secret
+```
+
+On each Android build CI decodes the keystore into `$RUNNER_TEMP/signing`,
+writes `android/key.properties`, builds, verifies the APK with `apksigner
+verify --print-certs`, and deletes the signing material. If
+`ANDROID_KEYSTORE_B64` is absent the build still succeeds with a debug-signed
+APK and a workflow warning.
+
+`keytool` can create either the classic JKS format or PKCS12 (the default in
+newer JDKs). Both work with Android Gradle Plugin; the extension does not have
+to be `.jks` as long as `storeFile` points at the file. For Play Store
+distribution, enrol in Play App Signing: Google keeps the app-signing key and
+this upload key only signs the bundle you upload.
+
+For a local signed build, run `tool/bootstrap.sh`, then create
+`android/key.properties` with absolute paths:
+
+```properties
+storeFile=/home/you/keys/mojac.jks
+storePassword=…
+keyAlias=mojac
+keyPassword=…
+```
 
 ### Dependency lockfile
 

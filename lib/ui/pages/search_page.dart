@@ -378,6 +378,8 @@ class _ChannelResult extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.mojacColors;
     final strings = context.strings;
+    // A public nullable field cannot be promoted, so copy it into a local.
+    final programme = program;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       clipBehavior: Clip.antiAlias,
@@ -424,11 +426,11 @@ class _ChannelResult extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      program == null
+                      programme == null
                           ? (channel.group ?? strings.noProgrammeInfo)
-                          : '${program.title} · ${strings.formatRange(
-                              program!.start,
-                              program!.stop,
+                          : '${programme.title} · ${strings.formatRange(
+                              programme.start,
+                              programme.stop,
                               use24HourTime: use24HourTime,
                             )}',
                       maxLines: 1,

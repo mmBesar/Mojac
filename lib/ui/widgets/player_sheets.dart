@@ -189,7 +189,7 @@ String _deinterlaceLabel(AppStrings strings, String mode) {
 String _formatDelay(double seconds) {
   final millis = (seconds * 1000).round();
   final sign = millis > 0 ? '+' : '';
-  return '$sign${millis} ms';
+  return '$sign$millis ms';
 }
 
 /// Picture controls: the aspect override, deinterlacing and the audio and

@@ -1345,7 +1345,9 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   String? _digitFor(LogicalKeyboardKey key) {
-    const digits = <LogicalKeyboardKey, String>{
+    // LogicalKeyboardKey overrides == and hashCode, so this map cannot be
+    // const; the Flutter analyzer rejects non-primitive const map keys.
+    final digits = <LogicalKeyboardKey, String>{
       LogicalKeyboardKey.digit0: '0',
       LogicalKeyboardKey.digit1: '1',
       LogicalKeyboardKey.digit2: '2',

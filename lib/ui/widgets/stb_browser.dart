@@ -206,7 +206,7 @@ class _StbChannelBrowserState extends State<StbChannelBrowser> {
     final colors = context.mojacColors;
     final channels = _filtered();
     if (_selected >= channels.length) {
-      _selected = channels.length == 0 ? 0 : channels.length - 1;
+      _selected = channels.isEmpty ? 0 : channels.length - 1;
     }
 
     return LayoutBuilder(
@@ -483,7 +483,7 @@ class _BrowserRow extends StatelessWidget {
               ),
               if (favorite)
                 Padding(
-                  padding: const EdgeInsets.only(start: 6),
+                  padding: const EdgeInsetsDirectional.only(start: 6),
                   child: Icon(
                     Icons.star_rounded,
                     size: 15,
@@ -492,7 +492,7 @@ class _BrowserRow extends StatelessWidget {
                 ),
               if (current)
                 Padding(
-                  padding: const EdgeInsets.only(start: 8),
+                  padding: const EdgeInsetsDirectional.only(start: 8),
                   child: Text(
                     strings.live,
                     style: TextStyle(

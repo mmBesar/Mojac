@@ -92,11 +92,19 @@ def patch_android_manifest() -> None:
 # patch idempotent when bootstrap runs over an existing checkout.
 SIGNING_MARKER = "Mojac release signing"
 
+# Kotlin scripts resolve `java` to Gradle's java extension, so `java.util.X`
+# fails with "Unresolved reference 'util'". Import the two JDK classes instead;
+# .kts imports must sit at the very top of the file, before plugins {}.
+KTS_SIGNING_IMPORTS = """import java.io.FileInputStream
+import java.util.Properties
+
+"""
+
 KTS_SIGNING_PROPERTIES = """// Mojac release signing: populated by CI from repository secrets.
-val mojacKeystoreProperties = java.util.Properties()
+val mojacKeystoreProperties = Properties()
 val mojacKeystoreFile = rootProject.file("key.properties")
 if (mojacKeystoreFile.exists()) {
-    mojacKeystoreProperties.load(java.io.FileInputStream(mojacKeystoreFile))
+    mojacKeystoreProperties.load(FileInputStream(mojacKeystoreFile))
 }
 
 """
@@ -177,7 +185,14 @@ def patch_android_gradle() -> None:
 
 def patch_kts_signing(text: str) -> str:
     if SIGNING_MARKER in text:
+        # Repair checkouts patched before the JDK imports were added.
+        text = text.replace("java.util.Properties()", "Properties()")
+        text = text.replace("java.io.FileInputStream(", "FileInputStream(")
+        if "import java.util.Properties" not in text:
+            text = KTS_SIGNING_IMPORTS + text
         return text
+    if "import java.util.Properties" not in text:
+        text = KTS_SIGNING_IMPORTS + text
     match = re.search(r"^android\s*\{", text, re.MULTILINE)
     if not match:
         print("  android {} block not found; skipping APK signing")

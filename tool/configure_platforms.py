@@ -30,13 +30,13 @@ DESKTOP_FILE = """[Desktop Entry]
 Type=Application
 Name=Mojac
 GenericName=IPTV Client
-Comment=Bidirectional IPTV client with a 12-hour guide
+Comment=Bidirectional IPTV client with an XMLTV guide
 Exec=mojac
 Icon=mojac
 Terminal=false
 Categories=AudioVideo;Video;Player;TV;
 Keywords=iptv;m3u;xmltv;tv;stream;
-StartupWMClass=mojac
+StartupWMClass=com.mmbesar.mojac
 """
 
 
@@ -291,7 +291,7 @@ def patch_linux() -> None:
 
 
 def write_desktop_entry() -> None:
-    write(BRANDING / "mojac.desktop", DESKTOP_FILE)
+    write(BRANDING / "com.mmbesar.mojac.desktop", DESKTOP_FILE)
 
 
 def main() -> int:

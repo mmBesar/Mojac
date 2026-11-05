@@ -288,6 +288,19 @@ class SettingsPage extends StatelessWidget {
                             height: 1.4,
                           ),
                     ),
+                    if (Platform.isLinux) ...<Widget>[
+                      const SizedBox(height: 18),
+                      _SelectField<String>(
+                        icon: Icons.memory_rounded,
+                        label: strings.videoRenderer,
+                        help: strings.videoRendererHelp,
+                        value: settings.playerRenderer,
+                        items: kPlayerRenderers,
+                        itemLabel: strings.rendererName,
+                        onChanged: (value) =>
+                            unawaited(state.setPlayerRenderer(value)),
+                      ),
+                    ],
                     // The switch only matters when a system mpv is installed;
                     // without one the launcher falls back to the built-in
                     // player.

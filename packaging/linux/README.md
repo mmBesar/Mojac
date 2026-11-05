@@ -15,8 +15,9 @@ Layout inside all packages:
 ```
 /opt/mojac/                  Flutter bundle (mojac, lib/, data/)
 /usr/bin/mojac               symlink or launcher
-/usr/share/applications/mojac.desktop
+/usr/share/applications/com.mmbesar.mojac.desktop
 /usr/share/icons/hicolor/512x512/apps/mojac.png
+/usr/share/metainfo/com.mmbesar.mojac.appdata.xml
 ```
 
 Runtime dependencies:

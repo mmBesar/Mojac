@@ -138,11 +138,14 @@ tool/package_linux.sh \
 
 Details:
 
-- **DEB** — installs into `/opt/mojac`, adds `/usr/bin/mojac`, the desktop file
-  and a 512×512 icon. Depends on `libgtk-3-0t64 | libgtk-3-0` (Ubuntu 24.04
-  renamed the package), `libmpv2 | libmpv1` and the usual C++ runtime
-  libraries.
-- **RPM** — same layout, requires `gtk3` and `mpv-libs`.
+- **DEB** — installs into `/opt/mojac`, adds `/usr/bin/mojac`, the
+  `com.mmbesar.mojac.desktop` launcher, a 512×512 icon and matching AppStream
+  metainfo under `/usr/share/metainfo`. Depends on
+  `libgtk-3-0t64 | libgtk-3-0` (Ubuntu 24.04 renamed the package),
+  `libmpv2 | libmpv1` and the usual C++ runtime libraries.
+- **RPM** — same layout, requires `gtk3` and `mpv-libs`; the metainfo is
+  installed alongside the desktop file so package managers can show the
+  application in their software centres.
 - **AppImage** — bundles the Flutter app under `usr/bin`, sets
   `LD_LIBRARY_PATH` to `usr/bin/lib`, and downloads `appimagetool` for the
   target architecture unless `APPIMAGETOOL` points at an existing binary.

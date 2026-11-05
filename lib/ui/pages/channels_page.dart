@@ -95,6 +95,36 @@ class _ChannelsPageState extends State<ChannelsPage> {
         : null;
     final channels = _filtered(allChannels, group);
     final allowInsecure = state.activeSource?.allowInsecureCerts ?? false;
+    final view = state.settings.channelsView;
+
+    Widget tile(Channel channel) {
+      if (view == 'grid') {
+        return ChannelGridTile(
+          channel: channel,
+          epg: state.epg,
+          now: state.now,
+          use24HourTime: state.settings.use24HourTime,
+          allowInsecure: allowInsecure,
+          favorite: state.isFavorite(channel.id),
+          onPlay: () => _openPlayer(channel),
+          onGuide: () => _openGuide(channel),
+          onToggleFavorite: () =>
+              unawaited(state.toggleFavorite(channel.id)),
+        );
+      }
+      return ChannelTile(
+        channel: channel,
+        epg: state.epg,
+        now: state.now,
+        use24HourTime: state.settings.use24HourTime,
+        allowInsecure: allowInsecure,
+        favorite: state.isFavorite(channel.id),
+        compact: view == 'compact',
+        onPlay: () => _openPlayer(channel),
+        onGuide: () => _openGuide(channel),
+        onToggleFavorite: () => unawaited(state.toggleFavorite(channel.id)),
+      );
+    }
 
     return Column(
       children: <Widget>[
@@ -123,7 +153,13 @@ class _ChannelsPageState extends State<ChannelsPage> {
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
+              _ChannelViewSwitcher(
+                value: view,
+                onChanged: (value) =>
+                    unawaited(state.setChannelsView(value)),
+              ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
@@ -176,25 +212,26 @@ class _ChannelsPageState extends State<ChannelsPage> {
                 )
               : RefreshIndicator(
                   onRefresh: state.refresh,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                    itemCount: channels.length,
-                    itemBuilder: (context, index) {
-                      final channel = channels[index];
-                      return ChannelTile(
-                        channel: channel,
-                        epg: state.epg,
-                        now: state.now,
-                        use24HourTime: state.settings.use24HourTime,
-                        allowInsecure: allowInsecure,
-                        favorite: state.isFavorite(channel.id),
-                        onPlay: () => _openPlayer(channel),
-                        onGuide: () => _openGuide(channel),
-                        onToggleFavorite: () =>
-                            unawaited(state.toggleFavorite(channel.id)),
-                      );
-                    },
-                  ),
+                  child: view == 'grid'
+                      ? GridView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                          gridDelegate:
+                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 220,
+                            mainAxisExtent: 188,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                          ),
+                          itemCount: channels.length,
+                          itemBuilder: (context, index) =>
+                              tile(channels[index]),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                          itemCount: channels.length,
+                          itemBuilder: (context, index) =>
+                              tile(channels[index]),
+                        ),
                 ),
         ),
       ],
@@ -214,6 +251,65 @@ class _ChannelsPageState extends State<ChannelsPage> {
           channel.number.toLowerCase().contains(query) ||
           (channel.group?.toLowerCase().contains(query) ?? false);
     }).toList(growable: false);
+  }
+}
+
+/// Three compact buttons that switch the channel list between the roomy list,
+/// the artwork grid and the dense one-line list.
+class _ChannelViewSwitcher extends StatelessWidget {
+  const _ChannelViewSwitcher({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  static IconData _icon(String view) => switch (view) {
+        'grid' => Icons.grid_view_rounded,
+        'compact' => Icons.view_stream_rounded,
+        _ => Icons.view_list_rounded,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.mojacColors;
+    final strings = context.strings;
+    String label(String view) => switch (view) {
+          'grid' => strings.viewGrid,
+          'compact' => strings.viewCompact,
+          _ => strings.viewList,
+        };
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: colors.surface1,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          for (final view in kChannelViews)
+            Tooltip(
+              message: label(view),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(9),
+                onTap: value == view ? null : () => onChanged(view),
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: value == view ? colors.surface2 : null,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(
+                    _icon(view),
+                    size: 17,
+                    color: value == view ? colors.accent : colors.overlay0,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

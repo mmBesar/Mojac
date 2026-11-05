@@ -244,6 +244,25 @@ class AppStrings {
       ? 'تعذّر على mpv تشغيل هذه القناة.'
       : 'mpv could not play this channel.';
 
+  String get videoRenderer =>
+      isArabic ? 'إخراج الفيديو المدمج' : 'Built-in video output';
+  String get videoRendererHelp => isArabic
+      ? 'يستخدم المشغّل المدمج تسريع الرسوميات افتراضياً. اختر «برمجي» إذا تجمّدت الصورة أو بقيت النافذة سوداء على سطح مكتب Wayland/Mesa قديم.'
+      : 'The built-in player uses GPU acceleration by default. Choose Software if the picture freezes or the window stays black on an older Wayland/Mesa desktop.';
+  String get rendererAuto => isArabic ? 'تلقائي (GPU)' : 'Automatic (GPU)';
+  String get rendererGpu => isArabic ? 'GPU' : 'GPU';
+  String get rendererSoftware => isArabic ? 'برمجي' : 'Software';
+  String rendererName(String value) => switch (value) {
+        'gpu' => rendererGpu,
+        'software' => rendererSoftware,
+        _ => rendererAuto,
+      };
+
+  String get channelsView => isArabic ? 'عرض القنوات' : 'Channel layout';
+  String get viewList => isArabic ? 'قائمة' : 'List';
+  String get viewGrid => isArabic ? 'شبكة' : 'Grid';
+  String get viewCompact => isArabic ? 'مضغوط' : 'Compact';
+
   String get channelGuide => isArabic ? 'دليل القناة' : 'Channel guide';
   String get watchLive => isArabic ? 'مشاهدة مباشرة' : 'Watch live';
   String get programmeGuide =>

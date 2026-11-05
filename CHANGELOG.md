@@ -91,6 +91,13 @@ All notable changes to Mojac are documented here. The format follows
   therefore ends the stream (and its server-side transcode) immediately. A
   setting switches back to the built-in player, which also remains the
   fallback when no `mpv` binary is installed.
+- Three channel layouts on the Channels page: the original roomy list, an
+  artwork grid that reflows from two cards on a phone to five or more on a
+  desktop, and a dense single-line list for long playlists. The choice is
+  saved with the other settings and can be switched from the toolbar.
+- AppStream metainfo (`com.mmbesar.mojac.appdata.xml`) and a reverse-DNS
+  desktop entry, installed by the DEB, RPM and AppImage so software centres
+  can identify Mojac and `appimagetool` can validate the AppDir cleanly.
 
 ### Changed
 
@@ -99,9 +106,13 @@ All notable changes to Mojac are documented here. The format follows
   programme range gets most of the travel, and `Ctrl`/`⌘` + scroll zooms around
   the centre of the viewport.
 - Programme text sticks to the visible edge of its block while the timeline
-  scrolls: left in LTR and right in Arabic. Blocks are culled and rebuilt
-  around the real viewport, so week-long windows and deep zoom no longer build
-  thousands of off-screen widgets.
+  scrolls: left in LTR and right in Arabic. Every programme in a built row is
+  laid out again; only artwork is limited to the visible viewport. Horizontal
+  block culling could leave whole rows blank when the viewport state was stale,
+  for example when the guide was first shown after being built offstage.
+- The guide window rolls forward before its future edge runs out: when 90
+  minutes remain, it jumps to a fresh window around "now" so the right side of
+  the grid always shows upcoming programmes.
 - Channel artwork is larger in both the channel list and the guide. The
   channel number now rides on the logo corner as a small badge instead of
   taking a text column, and the guide's channel column is logo-only.
@@ -122,12 +133,15 @@ All notable changes to Mojac are documented here. The format follows
   leaving video and audio silent behind the spinner while the server kept
   transcoding. The player now passes the same demuxer options without that
   flag, so the rendition is ignored and the video playlist stays active.
-- Linux playback now uses media_kit's software video output. The isolated
-  EGLImage texture path could freeze on its first frame on Wayland/Mesa and
-  take the UI with it; set `MOJAC_MPV_LOG=1` to get libmpv diagnostics.
-- The Linux software output now starts with a 1280x720 texture and follows the
-  stream's aspect ratio. Without a known size media_kit never rendered a first
-  frame, so playback stalled behind a black texture with no audio.
+- The built-in player uses GPU video output by default again on Linux, so
+  desktop playback is smooth instead of CPU-converted. A new Settings →
+  Playback renderer choice keeps the old software path as an escape hatch for
+  Wayland/Mesa systems where the EGLImage texture freezes, and
+  `MOJAC_PLAYER_RENDERER=software` overrides it without changing settings. Set
+  `MOJAC_MPV_LOG=1` to get libmpv diagnostics.
+- The software path starts with a 1280x720 texture and follows the stream's
+  aspect ratio. Without a known size media_kit never rendered a first frame,
+  so playback stalled behind a black texture with no audio.
 - Live streams get 60 seconds to produce their first segment instead of 30.
   Android playback also reports libmpv's messages and dumps player state after
   10, 20 and 30 seconds of buffering to `adb logcat`, above the endless

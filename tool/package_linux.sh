@@ -79,13 +79,18 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 ICON="$ROOT/assets/branding/linux/mojac.png"
-DESKTOP="$ROOT/assets/branding/mojac.desktop"
+DESKTOP="$ROOT/assets/branding/com.mmbesar.mojac.desktop"
+APPSTREAM="$ROOT/assets/branding/com.mmbesar.mojac.appdata.xml"
 if [[ ! -f "$ICON" ]]; then
   echo "Missing $ICON; run tool/generate_icons.sh" >&2
   exit 1
 fi
 if [[ ! -f "$DESKTOP" ]]; then
   echo "Missing $DESKTOP" >&2
+  exit 1
+fi
+if [[ ! -f "$APPSTREAM" ]]; then
+  echo "Missing $APPSTREAM" >&2
   exit 1
 fi
 
@@ -241,13 +246,17 @@ rm -rf "$WORK"
 mkdir -p "$OUT" "$ROOTFS/opt/mojac" \
   "$ROOTFS/usr/bin" \
   "$ROOTFS/usr/share/applications" \
-  "$ROOTFS/usr/share/icons/hicolor/512x512/apps"
+  "$ROOTFS/usr/share/icons/hicolor/512x512/apps" \
+  "$ROOTFS/usr/share/metainfo"
 
 cp -a "$BUNDLE/." "$ROOTFS/opt/mojac/"
 chmod +x "$ROOTFS/opt/mojac/mojac"
 ln -sfn /opt/mojac/mojac "$ROOTFS/usr/bin/mojac"
 install -m644 "$ICON" "$ROOTFS/usr/share/icons/hicolor/512x512/apps/mojac.png"
-install -m644 "$DESKTOP" "$ROOTFS/usr/share/applications/mojac.desktop"
+install -m644 "$DESKTOP" \
+  "$ROOTFS/usr/share/applications/com.mmbesar.mojac.desktop"
+install -m644 "$APPSTREAM" \
+  "$ROOTFS/usr/share/metainfo/com.mmbesar.mojac.appdata.xml"
 
 echo "Staged $(du -sh "$ROOTFS/opt/mojac" | cut -f1) application bundle for $DEB_ARCH."
 
@@ -327,8 +336,9 @@ cp -a "$ROOTFS/." %{buildroot}/
 %files
 /opt/mojac
 /usr/bin/mojac
-/usr/share/applications/mojac.desktop
+/usr/share/applications/com.mmbesar.mojac.desktop
 /usr/share/icons/hicolor/512x512/apps/mojac.png
+/usr/share/metainfo/com.mmbesar.mojac.appdata.xml
 EOF
 
   rpmbuild -bb \
@@ -351,13 +361,17 @@ build_appimage() {
   rm -rf "$appdir"
   mkdir -p "$appdir/usr/bin" \
     "$appdir/usr/share/applications" \
-    "$appdir/usr/share/icons/hicolor/512x512/apps"
+    "$appdir/usr/share/icons/hicolor/512x512/apps" \
+    "$appdir/usr/share/metainfo"
 
   cp -a "$BUNDLE/." "$appdir/usr/bin/"
   install -m644 "$ICON" "$appdir/usr/share/icons/hicolor/512x512/apps/mojac.png"
-  install -m644 "$DESKTOP" "$appdir/usr/share/applications/mojac.desktop"
+  install -m644 "$DESKTOP" \
+    "$appdir/usr/share/applications/com.mmbesar.mojac.desktop"
+  install -m644 "$APPSTREAM" \
+    "$appdir/usr/share/metainfo/com.mmbesar.mojac.appdata.xml"
   install -m644 "$ICON" "$appdir/mojac.png"
-  install -m644 "$DESKTOP" "$appdir/mojac.desktop"
+  install -m644 "$DESKTOP" "$appdir/com.mmbesar.mojac.desktop"
   ln -sfn mojac.png "$appdir/.DirIcon"
 
   cat > "$appdir/AppRun" <<'EOF'

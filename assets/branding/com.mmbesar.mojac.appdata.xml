@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.mmbesar.mojac</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Mojac</name>
+  <summary>Bidirectional IPTV client with a full XMLTV guide</summary>
+
+  <description>
+    <p>
+      Mojac is an IPTV client for Android and Linux. It reads M3U/M3U8
+      playlists and XMLTV guides from one or more sources, including Tunarr
+      and ErsatzTV, with optional support for self-signed HTTPS servers.
+    </p>
+    <p>
+      The guide is a zoomable timeline with per-channel schedules, now and
+      next summaries, programme details, search and favourites. Arabic and
+      English interfaces share first-class bidirectional text, and the
+      Catppuccin themes include an AMOLED mode.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">com.mmbesar.mojac.desktop</launchable>
+  <url type="homepage">https://github.com/mmbesar/Mojac</url>
+
+  <developer id="com.mmbesar">
+    <name>mmbesar</name>
+  </developer>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Video</category>
+    <category>Player</category>
+    <category>TV</category>
+  </categories>
+
+  <keywords>
+    <keyword>IPTV</keyword>
+    <keyword>M3U</keyword>
+    <keyword>XMLTV</keyword>
+    <keyword>TV</keyword>
+    <keyword>stream</keyword>
+  </keywords>
+
+  <provides>
+    <binary>mojac</binary>
+  </provides>
+
+  <releases>
+    <release version="0.1.0" date="2026-11-05">
+      <description>
+        <p>First release of Mojac.</p>
+      </description>
+    </release>
+  </releases>
+
+  <content_rating type="oars-1.1"/>
+</component>

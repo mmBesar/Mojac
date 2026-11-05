@@ -62,6 +62,29 @@ class _PlayerPageState extends State<PlayerPage> {
   static const int _softwareVideoWidth = 1280;
   static const int _softwareVideoHeight = 720;
 
+  /// `true` when the built-in player uses media_kit's CPU upload path instead
+  /// of the EGLImage hardware texture. On Linux the default is the GPU path,
+  /// which is smooth on current Mesa drivers; the software path stays
+  /// available for desktops where the hardware texture freezes. Set
+  /// `MOJAC_PLAYER_RENDERER=software` to override the persisted choice.
+  bool _softwareRenderer = false;
+
+  static String _resolveRenderer(String preference) {
+    if (!Platform.isLinux) {
+      return 'gpu';
+    }
+    try {
+      final override =
+          (Platform.environment['MOJAC_PLAYER_RENDERER'] ?? '').trim();
+      if (override == 'gpu' || override == 'software') {
+        return override;
+      }
+    } catch (_) {
+      // Not every platform exposes the environment.
+    }
+    return preference == 'software' ? 'software' : 'gpu';
+  }
+
   late final Player _player;
   late final VideoController _controller;
   late final FocusNode _focusNode;
@@ -160,6 +183,7 @@ class _PlayerPageState extends State<PlayerPage> {
     _volume = settings.playerVolume;
     _lastAudibleVolume = _volume > 1 ? _volume : 100;
     _persistedTracks = settings.channelTracks[_channel.id];
+    _softwareRenderer = _resolveRenderer(settings.playerRenderer) == 'software';
 
     _player = Player(
       configuration: PlayerConfiguration(
@@ -170,18 +194,16 @@ class _PlayerPageState extends State<PlayerPage> {
     _controller = VideoController(
       _player,
       configuration: VideoControllerConfiguration(
-        // media_kit 2.0.1 renders Linux video through an isolated EGL context
-        // and an EGLImage texture. On Wayland/Mesa that texture can stall on
-        // its first frame and take the whole UI down with it. The bundled
-        // libmpv exposes MPV_RENDER_API_TYPE_SW, so use the CPU upload path
-        // on Linux instead and keep the faster H/W path elsewhere.
-        enableHardwareAcceleration: !Platform.isLinux,
-        width: Platform.isLinux ? _softwareVideoWidth : null,
-        height: Platform.isLinux ? _softwareVideoHeight : null,
+        // Decode and present through the GPU by default. The software path
+        // keeps the old 1280x720 CPU texture as an escape hatch for machines
+        // whose EGL/Mesa stack cannot present the hardware texture.
+        enableHardwareAcceleration: !_softwareRenderer,
+        width: _softwareRenderer ? _softwareVideoWidth : null,
+        height: _softwareRenderer ? _softwareVideoHeight : null,
       ),
     );
     unawaited(_player.setVolume(_volume));
-    if (Platform.isLinux) {
+    if (_softwareRenderer) {
       _videoParamsSubscription = _player.stream.videoParams.listen(
         _resizeSoftwareVideo,
       );
@@ -539,7 +561,7 @@ class _PlayerPageState extends State<PlayerPage> {
     debugPrint(snapshot.toString());
   }
 
-  /// Keeps the Linux software texture at the stream's aspect ratio without
+  /// Keeps the software texture at the stream's aspect ratio without
   /// exceeding media_kit's 1920x1080 software buffer.
   void _resizeSoftwareVideo(VideoParams params) {
     final double width = (params.dw ?? params.w ?? 0).toDouble();
@@ -609,9 +631,10 @@ class _PlayerPageState extends State<PlayerPage> {
     final state = context.read<AppState>();
     final allowInsecure = state.activeSource?.allowInsecureCerts ?? false;
     try {
-      // The Linux software video path avoids the EGLImage texture entirely,
-      // so keep decoding on the CPU too and let libmpv convert directly.
-      await _setMpvProperty('hwdec', Platform.isLinux ? 'no' : 'auto-safe');
+      // The software video path avoids the EGLImage texture entirely, so keep
+      // decoding on the CPU too and let libmpv convert directly. The GPU path
+      // uses the platform's safe hardware decoder list.
+      await _setMpvProperty('hwdec', _softwareRenderer ? 'no' : 'auto-safe');
       await _setMpvProperty('keep-open', 'yes');
       await _setMpvProperty('network-timeout', '60');
       await _setMpvProperty('tls-verify', allowInsecure ? 'no' : 'yes');

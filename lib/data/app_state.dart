@@ -330,6 +330,20 @@ class AppState extends ChangeNotifier {
     return updateSettings(_settings.copyWith(playerDeinterlace: mode));
   }
 
+  Future<void> setPlayerRenderer(String renderer) {
+    if (!kPlayerRenderers.contains(renderer)) {
+      return Future<void>.value();
+    }
+    return updateSettings(_settings.copyWith(playerRenderer: renderer));
+  }
+
+  Future<void> setChannelsView(String view) {
+    if (!kChannelViews.contains(view)) {
+      return Future<void>.value();
+    }
+    return updateSettings(_settings.copyWith(channelsView: view));
+  }
+
   /// Remembers the audio and subtitle track picked for one channel. The map is
   /// capped so a long-lived install cannot grow the settings blob forever;
   /// Dart maps keep insertion order, so the oldest channel is dropped first.

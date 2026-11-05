@@ -492,6 +492,14 @@ const List<String> kPlayerAspects = <String>[
 
 const List<String> kPlayerDeinterlaceModes = <String>['auto', 'on', 'off'];
 
+/// Video output used by the built-in player. `auto` follows the platform
+/// (GPU where available) and `software` is the fallback for machines whose
+/// EGL/Mesa stack cannot present the hardware texture.
+const List<String> kPlayerRenderers = <String>['auto', 'gpu', 'software'];
+
+/// Layouts offered by the channels page.
+const List<String> kChannelViews = <String>['list', 'grid', 'compact'];
+
 class AppSettings {
   const AppSettings({
     required this.themeFamily,
@@ -510,6 +518,8 @@ class AppSettings {
     this.playerVolume = 100,
     this.playerAspect = 'auto',
     this.playerDeinterlace = 'auto',
+    this.playerRenderer = 'auto',
+    this.channelsView = 'list',
     this.channelTracks = const <String, String>{},
   });
 
@@ -565,6 +575,13 @@ class AppSettings {
   /// One of [kPlayerDeinterlaceModes].
   final String playerDeinterlace;
 
+  /// One of [kPlayerRenderers]. The built-in player uses it on desktop, where
+  /// the GPU texture can be replaced by the slower but reliable software path.
+  final String playerRenderer;
+
+  /// How the channels page lays out its list: `list`, `grid` or `compact`.
+  final String channelsView;
+
   /// Per-channel audio/subtitle choice, encoded as `audioId|subtitleId`.
   final Map<String, String> channelTracks;
 
@@ -585,6 +602,8 @@ class AppSettings {
     double? playerVolume,
     String? playerAspect,
     String? playerDeinterlace,
+    String? playerRenderer,
+    String? channelsView,
     Map<String, String>? channelTracks,
   }) {
     return AppSettings(
@@ -612,6 +631,8 @@ class AppSettings {
       playerVolume: (playerVolume ?? this.playerVolume).clamp(0, 100).toDouble(),
       playerAspect: playerAspect ?? this.playerAspect,
       playerDeinterlace: playerDeinterlace ?? this.playerDeinterlace,
+      playerRenderer: playerRenderer ?? this.playerRenderer,
+      channelsView: channelsView ?? this.channelsView,
       channelTracks: channelTracks ?? this.channelTracks,
     );
   }
@@ -633,6 +654,8 @@ class AppSettings {
         'playerVolume': playerVolume,
         'playerAspect': playerAspect,
         'playerDeinterlace': playerDeinterlace,
+        'playerRenderer': playerRenderer,
+        'channelsView': channelsView,
         'channelTracks': channelTracks,
       };
 
@@ -689,6 +712,16 @@ class AppSettings {
         json['playerDeinterlace'],
         kPlayerDeinterlaceModes,
         'auto',
+      ),
+      playerRenderer: _oneOf(
+        json['playerRenderer'],
+        kPlayerRenderers,
+        'auto',
+      ),
+      channelsView: _oneOf(
+        json['channelsView'],
+        kChannelViews,
+        'list',
       ),
       channelTracks: Map<String, String>.unmodifiable(channelTracks),
     );

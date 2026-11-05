@@ -115,6 +115,11 @@ class _GuidePageState extends State<GuidePage> {
   /// time has passed for "now" to fall outside the displayed schedule.
   bool _windowSyncScheduled = false;
 
+  /// Start rolling the window forward while this much of the schedule is still
+  /// ahead, so the guide never runs out of future programmes at its right
+  /// edge. A twelve-hour window therefore rolls every ten and a half hours.
+  static const Duration _rollAhead = Duration(minutes: 90);
+
   @override
   void initState() {
     super.initState();
@@ -199,13 +204,16 @@ class _GuidePageState extends State<GuidePage> {
     });
   }
 
-  /// If the app stayed open long enough for the guide window to scroll past
-  /// "now", move it back so the page does not present an empty schedule.
+  /// Keeps the guide supplied with future programmes. The window rolls forward
+  /// once "now" reaches the last [_rollAhead] of the schedule, and it also
+  /// recovers when the app resumes outside the displayed window, so the grid
+  /// never presents empty rows at its leading edge.
   void _ensureWindowContainsNow(DateTime now) {
     if (_windowSyncScheduled) {
       return;
     }
-    if (!now.isBefore(_windowStart) && now.isBefore(_windowEnd)) {
+    final rollAt = _windowEnd.subtract(_rollAhead);
+    if (!now.isBefore(_windowStart) && now.isBefore(rollAt)) {
       return;
     }
     _windowSyncScheduled = true;
@@ -215,7 +223,8 @@ class _GuidePageState extends State<GuidePage> {
         return;
       }
       final current = context.read<AppState>().now;
-      if (current.isBefore(_windowStart) || !current.isBefore(_windowEnd)) {
+      final nextRollAt = _windowEnd.subtract(_rollAhead);
+      if (current.isBefore(_windowStart) || !current.isBefore(nextRollAt)) {
         _jumpToNow();
       }
     });
@@ -598,8 +607,6 @@ class _GuidePageState extends State<GuidePage> {
                                                 state.settings.use24HourTime,
                                             allowInsecure: allowInsecure,
                                             even: index.isEven,
-                                            visibleStart: _visibleStart - 600,
-                                            visibleEnd: _visibleEnd + 600,
                                             horizontalOffset: _horizontalOffset,
                                             viewportWidth: viewportWidth,
                                             uiDirection: uiDirection,
@@ -1011,8 +1018,6 @@ class _GuideRow extends StatelessWidget {
     required this.use24HourTime,
     required this.allowInsecure,
     required this.even,
-    required this.visibleStart,
-    required this.visibleEnd,
     required this.horizontalOffset,
     required this.viewportWidth,
     required this.uiDirection,
@@ -1029,8 +1034,6 @@ class _GuideRow extends StatelessWidget {
   final bool use24HourTime;
   final bool allowInsecure;
   final bool even;
-  final double visibleStart;
-  final double visibleEnd;
   final ValueListenable<double> horizontalOffset;
   final double viewportWidth;
   final TextDirection uiDirection;
@@ -1167,12 +1170,10 @@ class _GuideRow extends StatelessWidget {
     if (width < 1) {
       return const SizedBox.shrink();
     }
-    // Only lay out blocks near the horizontal viewport. A 168-hour window at
-    // deep zoom is millions of pixels wide, and building every programme in
-    // it would create tens of thousands of widgets that never become visible.
-    if (left + width < visibleStart || left > visibleEnd) {
-      return const SizedBox.shrink();
-    }
+    // Every programme in a built row is laid out. Horizontal culling used to
+    // drop blocks outside the last known viewport, which left whole rows
+    // blank when that viewport was stale (for example when the guide was
+    // first shown after being built offstage). Only artwork is viewport-gated.
     final live = programme.isLiveAt(now);
     return Positioned(
       left: left,

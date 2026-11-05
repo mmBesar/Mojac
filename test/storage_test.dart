@@ -23,6 +23,8 @@ void main() {
       playerVolume: 42,
       playerAspect: '4:3',
       playerDeinterlace: 'on',
+      playerRenderer: 'software',
+      channelsView: 'grid',
       channelTracks: <String, String>{'home_1': '2|no'},
     );
     await storage.saveSettings(settings);
@@ -39,6 +41,8 @@ void main() {
     expect(loaded.playerVolume, 42);
     expect(loaded.playerAspect, '4:3');
     expect(loaded.playerDeinterlace, 'on');
+    expect(loaded.playerRenderer, 'software');
+    expect(loaded.channelsView, 'grid');
     expect(loaded.channelTracks, <String, String>{'home_1': '2|no'});
 
     final source = SourceConfig(
@@ -77,6 +81,8 @@ void main() {
       'playerVolume': 900,
       'playerAspect': '11:9',
       'playerDeinterlace': 'sometimes',
+      'playerRenderer': 'magic',
+      'channelsView': 'mosaic',
       'channelTracks': <String, dynamic>{
         'ok': '0|no',
         'empty': '',
@@ -86,6 +92,8 @@ void main() {
     expect(decoded.playerVolume, 100);
     expect(decoded.playerAspect, 'auto');
     expect(decoded.playerDeinterlace, 'auto');
+    expect(decoded.playerRenderer, 'auto');
+    expect(decoded.channelsView, 'list');
     expect(decoded.channelTracks, <String, String>{'ok': '0|no'});
   });
 }

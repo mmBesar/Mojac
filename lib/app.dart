@@ -25,7 +25,7 @@ import 'ui/app_shell.dart';
 /// nothing wraps differently, and a user's own accessibility scale is applied
 /// on top rather than replaced.
 class _DesktopTextScaler extends TextScaler {
-  _DesktopTextScaler(this.inner, this.factor);
+  const _DesktopTextScaler(this.inner, this.factor);
 
   final TextScaler inner;
   final double factor;
@@ -34,7 +34,7 @@ class _DesktopTextScaler extends TextScaler {
   double scale(double fontSize) => inner.scale(fontSize * factor);
 
   @override
-  double get textScaleFactor => inner.textScaleFactor * factor;
+  double get textScaleFactor => scale(1.0);
 
   // MediaQueryData compares its text scaler by value. Without this, a new
   // wrapper instance on every app rebuild would look like a scale change and

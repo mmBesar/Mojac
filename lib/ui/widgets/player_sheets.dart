@@ -41,19 +41,15 @@ class _SheetTitle extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.title,
-    this.subtitle,
   });
 
   final IconData icon;
   final Color color;
   final String title;
-  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = context.mojacColors;
-    final label = subtitle;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -78,16 +74,6 @@ class _SheetTitle extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              if (label != null && label.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    label,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colors.overlay0,
-                    ),
-                  ),
-                ),
             ],
           ),
         ),

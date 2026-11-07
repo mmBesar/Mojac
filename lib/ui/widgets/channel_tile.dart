@@ -252,8 +252,8 @@ class ChannelGridTile extends StatelessWidget {
                       DecoratedBox(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            begin: Alignment.topStart,
-                            end: Alignment.bottomEnd,
+                            begin: AlignmentDirectional.topStart,
+                            end: AlignmentDirectional.bottomEnd,
                             colors: <Color>[
                               colors.surface1,
                               colors.accentSoft,

@@ -187,10 +187,23 @@ are published only for tags pushed to the canonical repository.
 To cut a release:
 
 1. Update the version in `pubspec.yaml` and `lib/core/app_info.dart`
-   (`kAppVersion`); they must match.
-2. Add a `CHANGELOG.md` entry.
-3. Commit and tag: `git tag v0.1.1 && git push origin main v0.1.1`.
-4. The `release` job publishes the platform artifacts and checksums.
+   (`kAppVersion`). `test/app_info_test.dart` fails if they disagree.
+2. Add a `CHANGELOG.md` entry and an AppStream `<release>` entry in
+   `assets/branding/com.mmbesar.mojac.appdata.xml` (same version and date).
+3. Commit and push `main`, then wait for the `quality`, `android`,
+   `linux-amd64` and `linux-arm64` jobs to pass.
+4. Tag the green commit and push only the tag:
+   `git tag -a v0.1.1 -m "Mojac 0.1.1" && git push origin v0.1.1`.
+   The tag push runs the whole workflow again; the `release` job then
+   publishes the DEB, RPM, AppImage and ARM64 APK plus `SHA256SUMS` on the
+   GitHub release.
+5. Download one artifact per platform, check `SHA256SUMS`, and smoke-test the
+   AppImage (`timeout 30 appimage-run ./Mojac-0.1.1-x86_64.AppImage`) and the
+   APK (`adb install -r Mojac-0.1.1-arm64-v8a.apk`) before announcing it.
+
+Deleting and re-pushing a tag reruns the release job, which is handy for a
+failed artifact upload, but do not move a tag once the release has been
+announced. Bump the patch version instead.
 
 ### Signing the Android APK
 

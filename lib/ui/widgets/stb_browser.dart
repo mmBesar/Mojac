@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -176,6 +178,22 @@ class _StbChannelBrowserState extends State<StbChannelBrowser> {
       _select(_selected - 1, count);
       return KeyEventResult.handled;
     }
+    if (key == LogicalKeyboardKey.pageDown) {
+      _select(_selected + 8, count);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.pageUp) {
+      _select(_selected - 8, count);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.home) {
+      _select(0, count);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.end) {
+      _select(count - 1, count);
+      return KeyEventResult.handled;
+    }
     if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter) {
       _tuneSelected();
@@ -212,6 +230,173 @@ class _StbChannelBrowserState extends State<StbChannelBrowser> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxHeight = (constraints.maxHeight - 24).clamp(220.0, 600.0);
+        // A desktop window has room beside the picture: dock the list to the
+        // leading edge and let it use the full height instead of floating a
+        // phone-sized dialog in the middle of a 27-inch screen.
+        final side = constraints.maxWidth >= 900 &&
+            constraints.maxHeight >= 420;
+        final panel = Focus(
+          focusNode: _listFocus,
+          autofocus: true,
+          onKeyEvent: _onKey,
+          child: Container(
+            width: double.infinity,
+            constraints: BoxConstraints(
+              maxWidth: side ? 460 : 680,
+              maxHeight: side
+                  ? constraints.maxHeight - 28
+                  : maxHeight,
+            ),
+            decoration: stbPanelDecoration(
+              radius: 18,
+              accent: colors.accent,
+            ),
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    const Icon(
+                      Icons.live_tv_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        strings.browseChannels,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      strings.channelCount(channels.length),
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.5),
+                        fontSize: 11,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      tooltip: strings.close,
+                      onPressed: widget.onClose,
+                      icon: const Icon(Icons.close_rounded),
+                      color: Colors.white70,
+                      iconSize: 20,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _search,
+                  focusNode: _searchFocus,
+                  onChanged: (_) => setState(() => _selected = 0),
+                  onSubmitted: (_) => _tuneSelected(),
+                  textInputAction: TextInputAction.go,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13.5,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: strings.channelBrowserHint,
+                    hintStyle: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.38),
+                      fontSize: 13,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      size: 19,
+                      color: Colors.white.withValues(alpha: 0.5),
+                    ),
+                    suffixIcon: _search.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: strings.clearSearch,
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              size: 17,
+                            ),
+                            color: Colors.white54,
+                            onPressed: () {
+                              _search.clear();
+                              setState(() => _selected = 0);
+                              _listFocus.requestFocus();
+                            },
+                          ),
+                    isDense: true,
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.07),
+                    contentPadding:
+                        const EdgeInsets.symmetric(vertical: 11),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                if (widget.groups.length > 1) ...<Widget>[
+                  const SizedBox(height: 2),
+                  GroupFilterBar(
+                    groups: widget.groups,
+                    selected: widget.group,
+                    onChanged: widget.onGroupChanged,
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Divider(
+                  height: 1,
+                  color: Colors.white.withValues(alpha: 0.08),
+                ),
+                Flexible(
+                  child: channels.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 28,
+                          ),
+                          child: Text(
+                            strings.noChannelMatch,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white.withValues(
+                                alpha: 0.55,
+                              ),
+                              fontSize: 13,
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          controller: _scroll,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 6,
+                          ),
+                          itemExtent: _rowExtent,
+                          itemCount: channels.length,
+                          itemBuilder: (context, index) {
+                            final channel = channels[index];
+                            return _BrowserRow(
+                              channel: channel,
+                              programme: widget.nowFor(channel),
+                              favorite: widget.isFavorite(channel),
+                              current: channel.id == widget.current.id,
+                              selected: index == _selected,
+                              allowInsecure: widget.allowInsecure,
+                              onTap: () {
+                                _select(index, channels.length);
+                                widget.onTune(channel);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
         return Stack(
           children: <Widget>[
             Positioned.fill(
@@ -219,175 +404,27 @@ class _StbChannelBrowserState extends State<StbChannelBrowser> {
                 behavior: HitTestBehavior.opaque,
                 onTap: widget.onClose,
                 child: ColoredBox(
-                  color: Colors.black.withValues(alpha: 0.66),
+                  color: Colors.black.withValues(alpha: side ? 0.45 : 0.66),
                 ),
               ),
             ),
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Focus(
-                  focusNode: _listFocus,
-                  autofocus: true,
-                  onKeyEvent: _onKey,
-                  child: Container(
-                    width: double.infinity,
-                    constraints: BoxConstraints(
-                      maxWidth: 680,
-                      maxHeight: maxHeight,
-                    ),
-                    decoration: stbPanelDecoration(
-                      radius: 18,
-                      accent: colors.accent,
-                    ),
-                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Row(
-                          children: <Widget>[
-                            const Icon(
-                              Icons.live_tv_rounded,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                strings.browseChannels,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              strings.channelCount(channels.length),
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.5),
-                                fontSize: 11,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            IconButton(
-                              tooltip: strings.close,
-                              onPressed: widget.onClose,
-                              icon: const Icon(Icons.close_rounded),
-                              color: Colors.white70,
-                              iconSize: 20,
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _search,
-                          focusNode: _searchFocus,
-                          onChanged: (_) => setState(() => _selected = 0),
-                          onSubmitted: (_) => _tuneSelected(),
-                          textInputAction: TextInputAction.go,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13.5,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: strings.channelBrowserHint,
-                            hintStyle: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.38),
-                              fontSize: 13,
-                            ),
-                            prefixIcon: Icon(
-                              Icons.search_rounded,
-                              size: 19,
-                              color: Colors.white.withValues(alpha: 0.5),
-                            ),
-                            suffixIcon: _search.text.isEmpty
-                                ? null
-                                : IconButton(
-                                    tooltip: strings.clearSearch,
-                                    icon: const Icon(
-                                      Icons.close_rounded,
-                                      size: 17,
-                                    ),
-                                    color: Colors.white54,
-                                    onPressed: () {
-                                      _search.clear();
-                                      setState(() => _selected = 0);
-                                      _listFocus.requestFocus();
-                                    },
-                                  ),
-                            isDense: true,
-                            filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.07),
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 11),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                        if (widget.groups.length > 1) ...<Widget>[
-                          const SizedBox(height: 2),
-                          GroupFilterBar(
-                            groups: widget.groups,
-                            selected: widget.group,
-                            onChanged: widget.onGroupChanged,
-                          ),
-                        ],
-                        const SizedBox(height: 6),
-                        Divider(
-                          height: 1,
-                          color: Colors.white.withValues(alpha: 0.08),
-                        ),
-                        Flexible(
-                          child: channels.isEmpty
-                              ? Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 28,
-                                  ),
-                                  child: Text(
-                                    strings.noChannelMatch,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.55,
-                                      ),
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                )
-                              : ListView.builder(
-                                  controller: _scroll,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 6,
-                                  ),
-                                  itemExtent: _rowExtent,
-                                  itemCount: channels.length,
-                                  itemBuilder: (context, index) {
-                                    final channel = channels[index];
-                                    return _BrowserRow(
-                                      channel: channel,
-                                      programme: widget.nowFor(channel),
-                                      favorite: widget.isFavorite(channel),
-                                      current: channel.id == widget.current.id,
-                                      selected: index == _selected,
-                                      allowInsecure: widget.allowInsecure,
-                                      onTap: () {
-                                        _select(index, channels.length);
-                                        widget.onTune(channel);
-                                      },
-                                    );
-                                  },
-                                ),
-                        ),
-                      ],
-                    ),
-                  ),
+            if (side)
+              PositionedDirectional(
+                start: 14,
+                top: 14,
+                bottom: 14,
+                child: SizedBox(
+                  width: math.min(460.0, constraints.maxWidth * 0.44),
+                  child: panel,
+                ),
+              )
+            else
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: panel,
                 ),
               ),
-            ),
           ],
         );
       },

@@ -5,6 +5,7 @@ import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../l10n/strings.dart';
 import 'channel_logo.dart';
+import 'programme_poster.dart';
 import 'programme_summary.dart';
 
 /// One channel in the list and favourites pages.
@@ -174,10 +175,13 @@ class ChannelTile extends StatelessWidget {
   }
 }
 
-/// A portrait card for the channels page's grid layout. The logo and star sit
-/// on the first row, while the channel name and its current programme fill the
-/// space below. Tapping the card tunes the channel; the programme line opens
-/// the channel's schedule.
+/// A poster card for the channels page's grid layout.
+///
+/// The current programme's artwork is the card's background, with the channel
+/// logo, number and name over a scrim at the bottom. That makes the grid read
+/// like a wall of what is on now instead of a list of logos, which is the
+/// whole point of a grid view. The body keeps the now/next summary and opens
+/// the channel's schedule; tapping the artwork tunes the channel.
 class ChannelGridTile extends StatelessWidget {
   const ChannelGridTile({
     super.key,
@@ -208,6 +212,11 @@ class ChannelGridTile extends StatelessWidget {
     final theme = Theme.of(context);
     final strings = context.strings;
     final rtl = Directionality.of(context) == TextDirection.rtl;
+    final programme = epg.nowFor(channel, now) ?? epg.nextFor(channel, now);
+    // Only keep a programme that actually has artwork: the fallback below is
+    // nicer than a generic film icon stretched across the card.
+    final current =
+        programme != null && programme.images.isNotEmpty ? programme : null;
 
     return MediaQuery.withClampedTextScaling(
       // Grid cards have a fixed aspect ratio; very large accessibility text
@@ -215,108 +224,171 @@ class ChannelGridTile extends StatelessWidget {
       maxScaleFactor: 1.2,
       child: Material(
         color: colors.surface0,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onPlay,
-          child: Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(10, 8, 6, 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              SizedBox(
+                height: 112,
+                child: Stack(
+                  fit: StackFit.expand,
                   children: <Widget>[
-                    SizedBox(
-                      width: 56,
-                      height: 56,
-                      child: Stack(
-                        children: <Widget>[
-                          ChannelLogo(
-                            channel: channel,
-                            allowInsecure: allowInsecure,
-                            size: 56,
-                            radius: 12,
+                    if (current != null)
+                      FittedBox(
+                        fit: BoxFit.cover,
+                        clipBehavior: Clip.hardEdge,
+                        child: ProgrammePoster(
+                          programme: current,
+                          allowInsecure: allowInsecure,
+                          width: 240,
+                          height: 135,
+                          radius: 0,
+                        ),
+                      )
+                    else
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topStart,
+                            end: Alignment.bottomEnd,
+                            colors: <Color>[
+                              colors.surface1,
+                              colors.accentSoft,
+                            ],
                           ),
-                          if (channel.number.isNotEmpty)
-                            PositionedDirectional(
-                              start: 2,
-                              bottom: 2,
-                              child: ChannelNumberBadge(
-                                number: channel.displayNumber,
-                              ),
-                            ),
-                        ],
+                        ),
+                      ),
+                    // Scrim: the name and logo must stay readable on bright
+                    // artwork, and the star needs its own contrast at the top.
+                    const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: <Color>[
+                            Color(0x66000000),
+                            Color(0x00000000),
+                            Color(0xCC000000),
+                          ],
+                          stops: <double>[0, 0.45, 1],
+                        ),
                       ),
                     ),
-                    const Spacer(),
-                    IconButton(
-                      tooltip: favorite
-                          ? strings.removeFavorite
-                          : strings.addFavorite,
-                      onPressed: onToggleFavorite,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 30,
-                        minHeight: 30,
+                    PositionedDirectional(
+                      top: 2,
+                      end: 2,
+                      child: IconButton(
+                        tooltip: favorite
+                            ? strings.removeFavorite
+                            : strings.addFavorite,
+                        onPressed: onToggleFavorite,
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 30,
+                          minHeight: 30,
+                        ),
+                        iconSize: 19,
+                        icon: Icon(
+                          favorite
+                              ? Icons.star_rounded
+                              : Icons.star_border_rounded,
+                          color: favorite ? colors.accent : Colors.white70,
+                          shadows: const <Shadow>[
+                            Shadow(color: Colors.black54, blurRadius: 6),
+                          ],
+                        ),
                       ),
-                      iconSize: 20,
-                      icon: Icon(
-                        favorite
-                            ? Icons.star_rounded
-                            : Icons.star_border_rounded,
-                        color: favorite ? colors.accent : colors.overlay0,
+                    ),
+                    PositionedDirectional(
+                      start: 8,
+                      end: 8,
+                      bottom: 7,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: <Widget>[
+                          SizedBox(
+                            width: 38,
+                            height: 38,
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: <Widget>[
+                                ChannelLogo(
+                                  channel: channel,
+                                  allowInsecure: allowInsecure,
+                                  size: 38,
+                                  radius: 9,
+                                ),
+                                if (channel.number.isNotEmpty)
+                                  PositionedDirectional(
+                                    start: -3,
+                                    bottom: -3,
+                                    child: ChannelNumberBadge(
+                                      number: channel.displayNumber,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: BidiText(
+                              channel.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                height: 1.15,
+                                shadows: const <Shadow>[
+                                  Shadow(
+                                    color: Colors.black87,
+                                    blurRadius: 8,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Padding(
-                  padding: const EdgeInsetsDirectional.only(start: 4),
-                  child: BidiText(
-                    channel.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: colors.text,
+              ),
+              Expanded(
+                child: InkWell(
+                  onTap: onGuide,
+                  child: Padding(
+                    padding: const EdgeInsetsDirectional.fromSTEB(10, 6, 4, 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Expanded(
+                          child: ProgrammeSummary(
+                            channel: channel,
+                            epg: epg,
+                            now: now,
+                            use24HourTime: use24HourTime,
+                            dense: true,
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        Icon(
+                          rtl
+                              ? Icons.chevron_left_rounded
+                              : Icons.chevron_right_rounded,
+                          size: 18,
+                          color: colors.overlay0,
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 2),
-                Expanded(
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: onGuide,
-                    child: Padding(
-                      padding: const EdgeInsetsDirectional.fromSTEB(4, 2, 4, 2),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Expanded(
-                            child: ProgrammeSummary(
-                              channel: channel,
-                              epg: epg,
-                              now: now,
-                              use24HourTime: use24HourTime,
-                              dense: true,
-                            ),
-                          ),
-                          const SizedBox(width: 2),
-                          Icon(
-                            rtl
-                                ? Icons.chevron_left_rounded
-                                : Icons.chevron_right_rounded,
-                            size: 16,
-                            color: colors.overlay0,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

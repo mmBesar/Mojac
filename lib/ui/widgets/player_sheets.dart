@@ -18,6 +18,118 @@ import '../../player/playback_stats.dart';
 /// Catppuccin surface, drag handle and safe-area padding), so the player does
 /// not feel like a separate application.
 
+// Catppuccin Mocha accents. The sheets are the one place where colour carries
+// meaning instead of decoration: every section has a fixed hue, so a glance at
+// the tracks panel separates audio from subtitles, and the sleep panel reads
+// as "off / timed / programme end" before reading a single label.
+const Color _accentMauve = Color(0xFFCBA6F7);
+const Color _accentBlue = Color(0xFF89B4FA);
+const Color _accentGreen = Color(0xFFA6E3A1);
+const Color _accentPeach = Color(0xFFFAB387);
+const Color _accentYellow = Color(0xFFF9E2AF);
+const Color _accentTeal = Color(0xFF94E2D5);
+const Color _accentPink = Color(0xFFF5C2E7);
+const Color _accentRed = Color(0xFFF38BA8);
+const Color _accentSky = Color(0xFF89DCEB);
+const Color _accentLavender = Color(0xFFB4BEFE);
+
+/// A tinted icon chip and title at the top of a player sheet. The chip keeps
+/// the icon legible on any surface while the colour gives the panel an
+/// identity at a glance.
+class _SheetTitle extends StatelessWidget {
+  const _SheetTitle({
+    required this.icon,
+    required this.color,
+    required this.title,
+    this.subtitle,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = context.mojacColors;
+    final label = subtitle;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withValues(alpha: 0.4)),
+          ),
+          child: Icon(icon, size: 19, color: color),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                title,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (label != null && label.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    label,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.overlay0,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A small section label with a matching icon, used inside the tracks panel.
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.icon,
+    required this.color,
+    required this.label,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 20, 4),
+      child: Row(
+        children: <Widget>[
+          Icon(icon, size: 17, color: color),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 Future<void> showTrackSheet(
   BuildContext context, {
   required Player player,
@@ -33,16 +145,6 @@ Future<void> showTrackSheet(
     builder: (sheetContext) {
       final theme = Theme.of(sheetContext);
       final colors = sheetContext.mojacColors;
-      Widget header(String label) => Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
-            child: Text(
-              label,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: colors.subtext0,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          );
 
       return StreamBuilder<Tracks>(
         stream: player.stream.tracks,
@@ -56,7 +158,13 @@ Future<void> showTrackSheet(
               final selected = trackSnapshot.data ?? player.state.track;
               final rows = <Widget>[];
 
-              rows.add(header(strings.audioTracks));
+              rows.add(
+                _SectionHeader(
+                  icon: Icons.graphic_eq_rounded,
+                  color: _accentTeal,
+                  label: strings.audioTracks,
+                ),
+              );
               for (var index = 0; index < tracks.audio.length; index++) {
                 final track = tracks.audio[index];
                 final label = switch (track.id) {
@@ -69,10 +177,10 @@ Future<void> showTrackSheet(
                     leading: Icon(
                       selected.audio.id == track.id
                           ? Icons.check_circle_rounded
-                          : Icons.circle_outlined,
+                          : Icons.graphic_eq_rounded,
                       color: selected.audio.id == track.id
-                          ? colors.accent
-                          : colors.overlay0,
+                          ? _accentGreen
+                          : _accentTeal,
                     ),
                     title: BidiText(
                       label.isEmpty ? strings.trackNumber(index + 1) : label,
@@ -82,7 +190,13 @@ Future<void> showTrackSheet(
                 );
               }
 
-              rows.add(header(strings.subtitleTracks));
+              rows.add(
+                _SectionHeader(
+                  icon: Icons.subtitles_rounded,
+                  color: _accentPink,
+                  label: strings.subtitleTracks,
+                ),
+              );
               for (var index = 0; index < tracks.subtitle.length; index++) {
                 final track = tracks.subtitle[index];
                 final label = switch (track.id) {
@@ -95,10 +209,10 @@ Future<void> showTrackSheet(
                     leading: Icon(
                       selected.subtitle.id == track.id
                           ? Icons.check_circle_rounded
-                          : Icons.circle_outlined,
+                          : Icons.subtitles_rounded,
                       color: selected.subtitle.id == track.id
-                          ? colors.accent
-                          : colors.overlay0,
+                          ? _accentGreen
+                          : _accentPink,
                     ),
                     title: BidiText(
                       label.isEmpty ? strings.trackNumber(index + 1) : label,
@@ -128,7 +242,10 @@ Future<void> showTrackSheet(
                       Navigator.of(sheetContext).pop();
                       onRestoreDefaults();
                     },
-                    icon: const Icon(Icons.restart_alt_rounded),
+                    icon: const Icon(
+                      Icons.restart_alt_rounded,
+                      color: _accentYellow,
+                    ),
                     label: Text(strings.restoreTrackDefaults),
                   ),
                 ),
@@ -262,11 +379,10 @@ Future<void> showPictureSheet(
               shrinkWrap: true,
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
               children: <Widget>[
-                Text(
-                  strings.picture,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                _SheetTitle(
+                  icon: Icons.aspect_ratio_rounded,
+                  color: _accentBlue,
+                  title: strings.picture,
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -342,7 +458,10 @@ Future<void> showPictureSheet(
                     Navigator.of(sheetContext).pop();
                     onReset();
                   },
-                  icon: const Icon(Icons.restart_alt_rounded),
+                  icon: const Icon(
+                    Icons.restart_alt_rounded,
+                    color: _accentYellow,
+                  ),
                   label: Text(strings.resetPicture),
                 ),
               ],
@@ -397,17 +516,17 @@ class _DelayRow extends StatelessWidget {
         IconButton(
           tooltip: resetTooltip,
           onPressed: onReset,
-          icon: const Icon(Icons.restart_alt_rounded),
+          icon: const Icon(Icons.restart_alt_rounded, color: _accentYellow),
         ),
         IconButton(
           tooltip: label,
           onPressed: onDecrease,
-          icon: const Icon(Icons.remove_rounded),
+          icon: const Icon(Icons.remove_rounded, color: _accentPeach),
         ),
         IconButton(
           tooltip: label,
           onPressed: onIncrease,
-          icon: const Icon(Icons.add_rounded),
+          icon: const Icon(Icons.add_rounded, color: _accentGreen),
         ),
       ],
     );
@@ -431,22 +550,18 @@ Future<void> showSleepTimerSheet(
     backgroundColor: context.mojacColors.mantle,
     builder: (sheetContext) {
       final strings = sheetContext.strings;
-      final colors = sheetContext.mojacColors;
-      final theme = Theme.of(sheetContext);
       Widget row({
         required String label,
         required bool selected,
         required VoidCallback onTap,
         IconData icon = Icons.bedtime_outlined,
+        Color color = _accentYellow,
       }) {
         return ListTile(
-          leading: Icon(
-            icon,
-            color: selected ? colors.accent : colors.overlay0,
-          ),
+          leading: Icon(icon, color: selected ? color : color.withValues(alpha: 0.7)),
           title: Text(label),
           trailing: selected
-              ? Icon(Icons.check_rounded, color: colors.accent)
+              ? const Icon(Icons.check_rounded, color: _accentGreen)
               : null,
           onTap: onTap,
         );
@@ -459,17 +574,17 @@ Future<void> showSleepTimerSheet(
           padding: const EdgeInsets.only(bottom: 12),
           children: <Widget>[
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-              child: Text(
-                strings.sleepTimer,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+              child: _SheetTitle(
+                icon: Icons.bedtime_rounded,
+                color: _accentMauve,
+                title: strings.sleepTimer,
               ),
             ),
             row(
               label: strings.sleepOff,
               icon: Icons.do_not_disturb_on_outlined,
+              color: _accentRed,
               selected: minutes == null && !endOfProgramme,
               onTap: () {
                 Navigator.of(sheetContext).pop();
@@ -488,6 +603,7 @@ Future<void> showSleepTimerSheet(
             row(
               label: strings.sleepEndOfProgramme,
               icon: Icons.event_available_outlined,
+              color: _accentTeal,
               selected: endOfProgramme,
               onTap: () {
                 Navigator.of(sheetContext).pop();
@@ -572,13 +688,12 @@ Future<void> showShortcutsSheet(BuildContext context) {
           shrinkWrap: true,
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
           children: <Widget>[
-            Text(
-              strings.keyboardShortcuts,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+            _SheetTitle(
+              icon: Icons.keyboard_rounded,
+              color: _accentLavender,
+              title: strings.keyboardShortcuts,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
               strings.shortcutsIntro,
               style: theme.textTheme.bodySmall?.copyWith(
@@ -789,11 +904,10 @@ class _DiagnosticsSheetState extends State<_DiagnosticsSheet> {
           Row(
             children: <Widget>[
               Expanded(
-                child: Text(
-                  strings.playbackInfo,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: _SheetTitle(
+                  icon: Icons.monitor_heart_rounded,
+                  color: _accentSky,
+                  title: strings.playbackInfo,
                 ),
               ),
               IconButton(
@@ -806,7 +920,7 @@ class _DiagnosticsSheetState extends State<_DiagnosticsSheet> {
                     SnackBar(content: Text(strings.detailsCopied)),
                   );
                 },
-                icon: const Icon(Icons.copy_all_rounded),
+                icon: const Icon(Icons.copy_all_rounded, color: _accentSky),
               ),
             ],
           ),

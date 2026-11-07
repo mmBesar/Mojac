@@ -422,6 +422,14 @@ class _GuidePageState extends State<GuidePage> {
         (_rowStart / _rowHeight).floor() - _rowOverscan,
       ),
     );
+    // A short playlist is cheaper to build whole than to window: an ordinary
+    // 20-50 channel lineup is a few thousand small widgets, and building all
+    // of them means a stale viewport measurement (an offstage build, a resize
+    // during the first frame) can never leave a channel's row blank. Long
+    // playlists keep the lazy window so a phone guide stays light.
+    final buildAllRows = channels.length <= 80;
+    final visibleFirstRow = buildAllRows ? 0 : firstRow;
+    final visibleLastRow = buildAllRows ? channels.length - 1 : lastRow;
 
     final grid = Column(
       children: <Widget>[
@@ -546,19 +554,26 @@ class _GuidePageState extends State<GuidePage> {
                         width: _channelWidth,
                         child: Column(
                           children: <Widget>[
-                            SizedBox(height: firstRow * _rowHeight),
-                            for (var index = firstRow;
-                                index <= lastRow;
+                            SizedBox(
+                              height: visibleFirstRow * _rowHeight,
+                            ),
+                            for (var index = visibleFirstRow;
+                                index <= visibleLastRow;
                                 index++)
                               _ChannelCell(
+                                key: ValueKey<String>(
+                                  'channel-${channels[index].id}',
+                                ),
                                 channel: channels[index],
                                 allowInsecure: allowInsecure,
                                 onPlay: () => _openPlayer(channels[index]),
                                 onGuide: () => _openGuide(channels[index]),
                               ),
                             SizedBox(
-                              height:
-                                  (channels.length - 1 - lastRow) * _rowHeight,
+                              height: (channels.length -
+                                      1 -
+                                      visibleLastRow) *
+                                  _rowHeight,
                             ),
                           ],
                         ),
@@ -592,11 +607,16 @@ class _GuidePageState extends State<GuidePage> {
                                     ),
                                     Column(
                                       children: <Widget>[
-                                        SizedBox(height: firstRow * _rowHeight),
-                                        for (var index = firstRow;
-                                            index <= lastRow;
+                                        SizedBox(
+                                          height: visibleFirstRow * _rowHeight,
+                                        ),
+                                        for (var index = visibleFirstRow;
+                                            index <= visibleLastRow;
                                             index++)
                                           _GuideRow(
+                                            key: ValueKey<String>(
+                                              'row-${channels[index].id}',
+                                            ),
                                             channel: channels[index],
                                             epg: state.epg,
                                             windowStart: _windowStart,
@@ -620,7 +640,7 @@ class _GuidePageState extends State<GuidePage> {
                                         SizedBox(
                                           height: (channels.length -
                                                   1 -
-                                                  lastRow) *
+                                                  visibleLastRow) *
                                               _rowHeight,
                                         ),
                                       ],
@@ -945,6 +965,7 @@ class _GridPainter extends CustomPainter {
 
 class _ChannelCell extends StatelessWidget {
   const _ChannelCell({
+    super.key,
     required this.channel,
     required this.allowInsecure,
     required this.onPlay,
@@ -1009,6 +1030,7 @@ class _ChannelCell extends StatelessWidget {
 
 class _GuideRow extends StatelessWidget {
   const _GuideRow({
+    super.key,
     required this.channel,
     required this.epg,
     required this.windowStart,
@@ -1167,18 +1189,25 @@ class _GuideRow extends StatelessWidget {
       0.0,
       stop.difference(start).inSeconds / 60 * pixelsPerMinute - 2,
     );
-    if (width < 1) {
+    if (!stop.isAfter(start)) {
       return const SizedBox.shrink();
     }
+    // At the widest zoom a five-minute programme is a few pixels wide. Keeping
+    // a minimum sliver means a crowded schedule still reads as a schedule
+    // instead of a blank band, and the row can never appear to have no EPG.
+    final paintedWidth = math.max(1.5, width);
     // Every programme in a built row is laid out. Horizontal culling used to
     // drop blocks outside the last known viewport, which left whole rows
     // blank when that viewport was stale (for example when the guide was
     // first shown after being built offstage). Only artwork is viewport-gated.
     final live = programme.isLiveAt(now);
     return Positioned(
+      key: ValueKey<String>(
+        '${programme.channelId}|${programme.start.microsecondsSinceEpoch}',
+      ),
       left: left,
       top: _programmeTop,
-      width: width,
+      width: paintedWidth,
       height: _programmeHeight,
       child: _ProgrammeBlock(
         programme: programme,
@@ -1186,7 +1215,7 @@ class _GuideRow extends StatelessWidget {
         allowInsecure: allowInsecure,
         use24HourTime: use24HourTime,
         left: left,
-        width: width,
+        width: paintedWidth,
         horizontalOffset: horizontalOffset,
         viewportWidth: viewportWidth,
         uiDirection: uiDirection,
@@ -1344,8 +1373,12 @@ class _ProgrammeBlock extends StatelessWidget {
                   final detailed =
                       constraints.maxWidth > 110 && textScale <= 1.2;
                   // Very short programmes leave only a few pixels inside the
-                  // block, where an ellipsis reads as missing guide data.
-                  final hasText = constraints.maxWidth >= 44;
+                  // block, where an ellipsis reads as missing guide data. A
+                  // handful of pixels is still enough for the first letters,
+                  // and every pixel of text makes a dense schedule easier to
+                  // scan, so keep the threshold low and clip instead of
+                  // ellipsising below 44 px.
+                  final hasText = constraints.maxWidth >= 26;
                   // Only large visible slices carry artwork. XMLTV posters
                   // are full-size bitmaps (Tunarr serves ~570 KB each), and a
                   // long guide on a phone holds thousands of programmes, so
@@ -1381,7 +1414,9 @@ class _ProgrammeBlock extends StatelessWidget {
                   final title = BidiText(
                     programme.displayTitle,
                     maxLines: detailed ? 2 : 1,
-                    overflow: TextOverflow.ellipsis,
+                    overflow: detailed || constraints.maxWidth >= 44
+                        ? TextOverflow.ellipsis
+                        : TextOverflow.clip,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: colors.text,
                           fontWeight: FontWeight.w600,

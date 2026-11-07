@@ -67,6 +67,31 @@ void main() {
     expect(epg.forWindow(channel, at(13), at(14)), isEmpty);
   });
 
+  test('forWindow keeps programmes that started earlier and still run', () {
+    // A long film with short fillers logged inside it: the entry immediately
+    // before the window is already over, but the film still is not.
+    final overlapping = EpgData.fromMap(<String, List<Programme>>{
+      channel.id: <Programme>[
+        programme('Film', 8, 0, 12, 30),
+        programme('Filler 1', 9, 0, 9, 10),
+        programme('Filler 2', 9, 10, 9, 20),
+      ],
+    });
+    final window = overlapping.forWindow(channel, at(10, 15), at(10, 25));
+    expect(window.map((item) => item.title), <String>['Film']);
+  });
+
+  test('fromMap sorts programmes that arrive out of order', () {
+    final unsorted = EpgData.fromMap(<String, List<Programme>>{
+      channel.id: <Programme>[
+        programme('B', 11, 0, 12, 0),
+        programme('A', 10, 0, 11, 0),
+      ],
+    });
+    expect(unsorted.nowFor(channel, at(10, 30))?.title, 'A');
+    expect(unsorted.nextFor(channel, at(10, 30))?.title, 'B');
+  });
+
   test('queries on an empty channel are safe', () {
     const empty = Channel(
       id: 'source_2',

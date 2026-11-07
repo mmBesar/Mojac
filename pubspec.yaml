@@ -1,7 +1,7 @@
 name: mojac
 description: A bidirectional IPTV client for Android and Linux with a 12-hour XMLTV guide.
 publish_to: "none"
-version: 0.1.0+1
+version: 0.1.1+2
 
 environment:
   sdk: ">=3.13.0 <4.0.0"
@@ -28,6 +28,9 @@ dependencies:
   dynamic_color: ">=1.9.0 <2.0.0"
   screen_brightness: ^2.1.11
   wakelock_plus: ^1.8.2
+  # Real OS-window fullscreen for the built-in desktop player. The plugin has
+  # no Android implementation, so Android keeps using SystemChrome.
+  window_manager: ^0.6.0
 
   # Parsing and small utilities.
   xml: ^6.5.0

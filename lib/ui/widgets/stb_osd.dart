@@ -85,18 +85,33 @@ class StbBanner extends StatelessWidget {
     final logoSize = compact ? 44.0 : 54.0;
     final titleSize = compact ? 15.0 : 18.0;
 
+    // Each chip keeps the colour its sheet section uses, so the banner is a
+    // compact reminder of where the same setting lives.
     final chips = <Widget>[
       if (channel.group != null && channel.group!.trim().isNotEmpty)
         _StbChip(
           icon: Icons.folder_outlined,
+          color: const Color(0xFFF9E2AF),
           label: channel.group!.trim(),
         ),
       if (sleepLabel != null)
-        _StbChip(icon: Icons.bedtime_rounded, label: sleepLabel!),
+        _StbChip(
+          icon: Icons.bedtime_rounded,
+          color: const Color(0xFFCBA6F7),
+          label: sleepLabel!,
+        ),
       if (audioLabel != null)
-        _StbChip(icon: Icons.graphic_eq_rounded, label: audioLabel!),
+        _StbChip(
+          icon: Icons.graphic_eq_rounded,
+          color: const Color(0xFF94E2D5),
+          label: audioLabel!,
+        ),
       if (subtitleLabel != null)
-        _StbChip(icon: Icons.subtitles_rounded, label: subtitleLabel!),
+        _StbChip(
+          icon: Icons.subtitles_rounded,
+          color: const Color(0xFFF5C2E7),
+          label: subtitleLabel!,
+        ),
     ];
 
     return GestureDetector(
@@ -378,64 +393,63 @@ class StbLevelOsd extends StatelessWidget {
     final filled = (value.clamp(0.0, 1.0) * segments).round();
     final accent = muted ? const Color(0xFFF38BA8) : colors.accent;
     return IgnorePointer(
-      child: Center(
-        child: Container(
-          width: 288,
-          padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
-          decoration: stbPanelDecoration(accent: accent),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Icon(icon, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
+      child: Container(
+        width: double.infinity,
+        constraints: const BoxConstraints(maxWidth: 340),
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+        decoration: stbPanelDecoration(accent: accent),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Icon(icon, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.88),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(
+                  '$percent%',
+                  textDirection: TextDirection.ltr,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: <FontFeature>[
+                      FontFeature.tabularFigures(),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: <Widget>[
+                for (var index = 0; index < segments; index++) ...<Widget>[
                   Expanded(
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.88),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 90),
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: index < filled
+                            ? accent
+                            : Colors.white.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
-                  Text(
-                    '$percent%',
-                    textDirection: TextDirection.ltr,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      fontFeatures: <FontFeature>[
-                        FontFeature.tabularFigures(),
-                      ],
-                    ),
-                  ),
+                  if (index != segments - 1) const SizedBox(width: 2),
                 ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: <Widget>[
-                  for (var index = 0; index < segments; index++) ...<Widget>[
-                    Expanded(
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 90),
-                        height: 16,
-                        decoration: BoxDecoration(
-                          color: index < filled
-                              ? accent
-                              : Colors.white.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    if (index != segments - 1) const SizedBox(width: 2),
-                  ],
-                ],
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -524,24 +538,29 @@ class _LiveDot extends StatelessWidget {
 }
 
 class _StbChip extends StatelessWidget {
-  const _StbChip({required this.icon, required this.label});
+  const _StbChip({
+    required this.icon,
+    required this.label,
+    this.color = Colors.white70,
+  });
 
   final IconData icon;
   final String label;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.09),
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Icon(icon, size: 11, color: Colors.white.withValues(alpha: 0.68)),
+          Icon(icon, size: 11, color: color),
           const SizedBox(width: 4),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 170),

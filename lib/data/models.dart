@@ -357,25 +357,59 @@ class Playlist {
 }
 
 class EpgData {
-  EpgData._(this._byChannel, this.programmeCount);
+  EpgData._(this._byChannel, this._latestStop, this.programmeCount);
 
-  factory EpgData.empty() => EpgData._(const <String, List<Programme>>{}, 0);
+  factory EpgData.empty() => EpgData._(
+        const <String, List<Programme>>{},
+        const <String, List<int>>{},
+        0,
+      );
 
   factory EpgData.fromMap(Map<String, List<Programme>> byChannel) {
     final frozen = <String, List<Programme>>{};
+    final latestStop = <String, List<int>>{};
     var count = 0;
     for (final entry in byChannel.entries) {
       if (entry.value.isEmpty) {
         continue;
       }
-      final programmes = List<Programme>.unmodifiable(entry.value);
-      frozen[entry.key] = programmes;
+      // Every query below binary-searches by start time, so the order is a
+      // correctness requirement, not a nicety. The parser and the cache write
+      // sorted lists, but a feed with slightly out-of-order `<programme>`
+      // tags, or a cache written by an older build, must not silently blank a
+      // channel's whole guide row. Sorting here normalises every source.
+      final programmes = List<Programme>.of(entry.value)
+        ..sort((a, b) => a.start.compareTo(b.start));
+      frozen[entry.key] = List<Programme>.unmodifiable(programmes);
+      // Running maximum of the stop time. A feed can contain overlapping
+      // programmes (a film plus short fillers, or a duplicated entry), so a
+      // programme that began earlier than the window can still be on air even
+      // when the entry just before it in start order is already over.
+      final stops = <int>[];
+      var latest = 0;
+      for (final programme in programmes) {
+        final stop = programme.stop.microsecondsSinceEpoch;
+        if (stop > latest) {
+          latest = stop;
+        }
+        stops.add(latest);
+      }
+      latestStop[entry.key] = List<int>.unmodifiable(stops);
       count += programmes.length;
     }
-    return EpgData._(Map<String, List<Programme>>.unmodifiable(frozen), count);
+    return EpgData._(
+      Map<String, List<Programme>>.unmodifiable(frozen),
+      Map<String, List<int>>.unmodifiable(latestStop),
+      count,
+    );
   }
 
   final Map<String, List<Programme>> _byChannel;
+
+  /// Per channel, the latest stop time among the programmes up to each index.
+  /// Only [forWindow] needs this, to find every programme that can overlap the
+  /// visible window without scanning a whole day of entries.
+  final Map<String, List<int>> _latestStop;
   final int programmeCount;
 
   int get matchedChannels => _byChannel.length;
@@ -413,10 +447,19 @@ class EpgData {
       return const <Programme>[];
     }
     // Programmes are sorted by start, so jump close to the window instead of
-    // walking the whole day. One step back keeps a programme that started
-    // before the window but is still running.
+    // walking the whole day. A programme that began before the window and is
+    // still running can be several entries back (a long film followed by
+    // short fillers, or an overlapping duplicate), so walk the earlier
+    // entries while any of them can still end after the window starts.
     final first = _firstStartAtOrAfter(programmes, windowStart);
-    final from = first > 0 ? first - 1 : 0;
+    final stops = _latestStop[channel.id];
+    var from = first;
+    if (stops != null) {
+      final windowStartMicros = windowStart.microsecondsSinceEpoch;
+      while (from > 0 && stops[from - 1] > windowStartMicros) {
+        from--;
+      }
+    }
     final result = <Programme>[];
     for (var index = from; index < programmes.length; index++) {
       final programme = programmes[index];

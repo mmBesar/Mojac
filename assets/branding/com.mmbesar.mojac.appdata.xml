@@ -47,6 +47,13 @@
   </provides>
 
   <releases>
+    <release version="0.1.1" date="2026-11-07">
+      <description>
+        <p>Guide rows are reliable on every channel, desktop fullscreen uses
+        the real window manager, and the player overlays can be driven with a
+        mouse and keyboard.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-11-05">
       <description>
         <p>First release of Mojac.</p>

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/bidi.dart';
@@ -8,7 +9,7 @@ import '../../l10n/strings.dart';
 /// Horizontal group chips shared by Channels and Guide. Both pages read and
 /// write [AppSettings.groupFilter], so choosing a group on one page filters the
 /// other page as well.
-class GroupFilterBar extends StatelessWidget {
+class GroupFilterBar extends StatefulWidget {
   const GroupFilterBar({
     super.key,
     required this.groups,
@@ -21,30 +22,70 @@ class GroupFilterBar extends StatelessWidget {
   final ValueChanged<String?> onChanged;
 
   @override
+  State<GroupFilterBar> createState() => _GroupFilterBarState();
+}
+
+class _GroupFilterBarState extends State<GroupFilterBar> {
+  final ScrollController _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// A mouse wheel over a horizontal strip scrolls it sideways. Without this
+  /// the only way to reach a group past the edge is to drag with the mouse,
+  /// which a desktop user never thinks to do.
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_scroll.hasClients) {
+      return;
+    }
+    final delta = event.scrollDelta.dy != 0
+        ? event.scrollDelta.dy
+        : event.scrollDelta.dx;
+    if (delta == 0) {
+      return;
+    }
+    GestureBinding.instance.pointerSignalResolver
+        .register(event, (PointerSignalEvent _) {});
+    final position = _scroll.position;
+    _scroll.jumpTo(
+      (position.pixels + delta).clamp(0.0, position.maxScrollExtent),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final groups = widget.groups;
     if (groups.length <= 1) {
       return const SizedBox.shrink();
     }
     final strings = context.strings;
+    final selected = widget.selected;
     final effective = groups.contains(selected) ? selected : null;
     return SizedBox(
       height: 42,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: <Widget>[
-          _GroupChip(
-            label: strings.allGroups,
-            selected: effective == null,
-            onSelected: () => onChanged(null),
-          ),
-          for (final group in groups)
+      child: Listener(
+        onPointerSignal: _onPointerSignal,
+        child: ListView(
+          controller: _scroll,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          children: <Widget>[
             _GroupChip(
-              label: group,
-              selected: effective == group,
-              onSelected: () => onChanged(group),
+              label: strings.allGroups,
+              selected: effective == null,
+              onSelected: () => widget.onChanged(null),
             ),
-        ],
+            for (final group in groups)
+              _GroupChip(
+                label: group,
+                selected: effective == group,
+                onSelected: () => widget.onChanged(group),
+              ),
+          ],
+        ),
       ),
     );
   }

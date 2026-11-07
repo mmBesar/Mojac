@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -11,6 +12,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../core/bidi.dart';
+import '../core/desktop_window.dart';
 import '../core/network_image.dart';
 import '../core/playback.dart';
 import '../core/theme.dart';
@@ -478,8 +480,19 @@ class _PlayerPageState extends State<PlayerPage> {
   Future<void> _toggleFullscreen() async {
     final next = !_fullscreen;
     setState(() => _fullscreen = next);
-    await _setSystemUi(immersive: next);
-    await _setOrientation(landscape: next);
+    // Desktop gets a real fullscreen window from the window manager. The
+    // SystemChrome calls are no-ops there, and they cannot hide the title bar,
+    // the dock or the desktop, which is why fullscreen used to only fill the
+    // app window. They remain the mobile path (and the fallback when the
+    // window manager is unavailable).
+    final native = await DesktopWindow.instance.setFullscreen(next);
+    if (!native) {
+      await _setSystemUi(immersive: next);
+      await _setOrientation(landscape: next);
+    }
+    if (mounted) {
+      _focusNode.requestFocus();
+    }
   }
 
   Future<void> _setSystemUi({required bool immersive}) async {
@@ -876,6 +889,16 @@ class _PlayerPageState extends State<PlayerPage> {
         unawaited(context.read<AppState>().setPlayerVolume(volume));
       }
     });
+  }
+
+  /// Mouse-wheel volume: one notch is a few percent, a trackpad's small
+  /// deltas stay proportional, and a fast flick cannot jump the whole range.
+  void _nudgeVolume(double wheelDelta) {
+    if (wheelDelta == 0) {
+      return;
+    }
+    final step = (wheelDelta.abs() / 4).clamp(1.5, 6.0).toDouble();
+    _adjustVolume(wheelDelta > 0 ? step : -step);
   }
 
   void _adjustVolume(double delta) {
@@ -1431,6 +1454,7 @@ class _PlayerPageState extends State<PlayerPage> {
       }),
     );
     unawaited(_player.dispose());
+    unawaited(DesktopWindow.instance.setFullscreen(false));
     unawaited(_setSystemUi(immersive: false));
     unawaited(_setOrientation(landscape: false));
     super.dispose();
@@ -1461,6 +1485,7 @@ class _PlayerPageState extends State<PlayerPage> {
       onRetry: _open,
       fullscreen: _fullscreen,
       onToggleFullscreen: _toggleFullscreen,
+      onScrollVolume: _nudgeVolume,
       onDragStart: _startGesture,
       onDragUpdate: _updateGesture,
       onTap: _toggleOverlay,
@@ -1728,6 +1753,7 @@ class _VideoPane extends StatelessWidget {
     required this.onRetry,
     required this.fullscreen,
     required this.onToggleFullscreen,
+    required this.onScrollVolume,
     required this.onDragStart,
     required this.onDragUpdate,
     required this.onTap,
@@ -1759,6 +1785,7 @@ class _VideoPane extends StatelessWidget {
   final VoidCallback onRetry;
   final bool fullscreen;
   final VoidCallback onToggleFullscreen;
+  final ValueChanged<double> onScrollVolume;
   final void Function(Offset position, double width) onDragStart;
   final void Function(DragUpdateDetails details, double height) onDragUpdate;
   final VoidCallback onTap;
@@ -1831,22 +1858,38 @@ class _VideoPane extends StatelessWidget {
           return Stack(
             children: <Widget>[
               Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onTap,
-                  onDoubleTap: onToggleFullscreen,
-                  onVerticalDragStart: (details) =>
-                      onDragStart(details.localPosition, constraints.maxWidth),
-                  onVerticalDragUpdate: (details) =>
-                      onDragUpdate(details, constraints.maxHeight),
-                  onHorizontalDragEnd: (details) {
-                    final velocity = details.primaryVelocity ?? 0;
-                    if (velocity.abs() < 240) {
+                child: Listener(
+                  // The wheel over the picture is the fastest volume control
+                  // on a desktop, and the level OSD already exists for it.
+                  onPointerSignal: (event) {
+                    if (event is! PointerScrollEvent) {
                       return;
                     }
-                    onSwipe(velocity < 0 ? 1 : -1);
+                    final delta = -event.scrollDelta.dy;
+                    if (delta == 0) {
+                      return;
+                    }
+                    GestureBinding.instance.pointerSignalResolver
+                        .register(event, (PointerSignalEvent _) {});
+                    onScrollVolume(delta);
                   },
-                  child: video,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onTap,
+                    onDoubleTap: onToggleFullscreen,
+                    onVerticalDragStart: (details) =>
+                        onDragStart(details.localPosition, constraints.maxWidth),
+                    onVerticalDragUpdate: (details) =>
+                        onDragUpdate(details, constraints.maxHeight),
+                    onHorizontalDragEnd: (details) {
+                      final velocity = details.primaryVelocity ?? 0;
+                      if (velocity.abs() < 240) {
+                        return;
+                      }
+                      onSwipe(velocity < 0 ? 1 : -1);
+                    },
+                    child: video,
+                  ),
                 ),
               ),
               if (dimOpacity > 0)
@@ -1964,7 +2007,12 @@ class _VideoPane extends StatelessWidget {
                   child: Center(
                     child: ConstrainedBox(
                       constraints: BoxConstraints(
-                        maxWidth: compact ? 520 : 680,
+                        // A wide desktop window gets a wide banner: the
+                        // programme row, chips and next-up line all breathe
+                        // instead of wrapping into a narrow column.
+                        maxWidth: compact
+                            ? 520
+                            : (constraints.maxWidth >= 1100 ? 960 : 680),
                       ),
                       child: banner!,
                     ),
@@ -2057,7 +2105,18 @@ class _VideoPane extends StatelessWidget {
                   end: 64,
                   child: Center(child: messageOsd!),
                 ),
-              if (levelOsd != null) Positioned.fill(child: levelOsd!),
+              if (levelOsd != null)
+                Positioned.fill(
+                  // Volume and brightness sit in the lower third, like a
+                  // set-top box, so the picture's centre stays readable.
+                  child: Align(
+                    alignment: const Alignment(0, 0.62),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: levelOsd!,
+                    ),
+                  ),
+                ),
             ],
           );
         },

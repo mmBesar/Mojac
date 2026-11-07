@@ -217,10 +217,15 @@ class _ChannelsPageState extends State<ChannelsPage> {
                           padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                           gridDelegate:
                               const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 220,
-                            mainAxisExtent: 188,
-                            crossAxisSpacing: 10,
-                            mainAxisSpacing: 10,
+                            // Cards carry a 112 px poster header plus a two
+                            // line now/next body, so they need more height
+                            // than the old logo tiles. A slightly wider cell
+                            // lets the artwork read as a picture instead of a
+                            // strip.
+                            maxCrossAxisExtent: 240,
+                            mainAxisExtent: 208,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
                           ),
                           itemCount: channels.length,
                           itemBuilder: (context, index) =>

@@ -30,8 +30,12 @@ sudo apt-get update
 sudo apt-get install --yes --no-install-recommends \
   clang cmake ninja-build pkg-config \
   libgtk-3-dev liblzma-dev libmpv-dev \
+  libxi-dev libx11-dev \
   dpkg-dev rpm
 ```
+
+`libxi-dev` and `libx11-dev` are needed by the window-management plugin that
+gives the built-in player real desktop fullscreen.
 
 `libmpv-dev` is only needed to compile/link against libmpv; the resulting
 application loads libmpv at runtime, so end users need `libmpv2`/`libmpv1`
@@ -182,7 +186,7 @@ To cut a release:
 1. Update the version in `pubspec.yaml` and `lib/core/app_info.dart`
    (`kAppVersion`); they must match.
 2. Add a `CHANGELOG.md` entry.
-3. Commit and tag: `git tag v0.1.0 && git push origin main v0.1.0`.
+3. Commit and tag: `git tag v0.1.1 && git push origin main v0.1.1`.
 4. The `release` job publishes the platform artifacts and checksums.
 
 ### Signing the Android APK

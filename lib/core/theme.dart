@@ -229,6 +229,12 @@ ThemeData _baseTheme({
     scaffoldBackgroundColor: background,
     canvasColor: background,
     fontFamilyFallback: kFontFallback,
+    // Material's adaptive density goes compact on desktop, which shrinks every
+    // button, chip and list row. A ten-foot UI is not a dense data table: keep
+    // the comfortable mobile metrics on every platform and keep tap targets at
+    // their padded size, so the desktop build is not miniature.
+    visualDensity: VisualDensity.standard,
+    materialTapTargetSize: MaterialTapTargetSize.padded,
   );
 
   final inputBorder = OutlineInputBorder(

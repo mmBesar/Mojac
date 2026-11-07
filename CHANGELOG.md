@@ -4,7 +4,53 @@ All notable changes to Mojac are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] - Unreleased
+## [0.1.1] - 2026-11-07
+
+### Added
+
+- Real desktop fullscreen in the built-in player. The old button only hid the
+  Flutter chrome inside a decorated window; the player now asks the window
+  manager for true fullscreen (no title bar, dock or desktop) and restores the
+  previous window state when it closes or when playback ends.
+- Scroll-wheel volume over the picture, with the existing 30-segment level
+  overlay. A trackpad's small deltas stay proportional and a fast flick cannot
+  jump the whole range.
+- Mouse-wheel scrolling for the horizontal group chips on Channels and Guide,
+  so a group past the edge no longer requires a drag.
+- The in-player channel browser docks to the side on wide windows, uses the
+  full height and dims the picture less, while narrow windows keep the centred
+  panel. PageUp/PageDown/Home/End move and jump through the list.
+- Coloured icons in the player's track, picture, sleep, shortcut and
+  diagnostics sheets. Audio is teal, subtitles pink, playback status green,
+  sleep mauve and diagnostics sky, so sections separate at a glance.
+- The channels grid is now a wall of what is on now: each card uses the
+  current programme's artwork (or the next one's when nothing is on) behind
+  the channel logo, number badge and name, with the now/next summary below.
+
+### Changed
+
+- Desktop windows scale text up modestly (3-10% depending on width) and use
+  standard Material density instead of the compact desktop metrics, so buttons,
+  chips and list rows are comfortable from a sofa without changing phone
+  layouts. A user's own accessibility text scale still applies on top.
+- The player banner is wider on wide windows (up to 960 px), and the volume and
+  brightness overlay sits in the lower third instead of covering the centre of
+  the picture.
+
+### Fixed
+
+- Guide rows no longer turn up blank on individual channels. EPG data is now
+  sorted by start time when it is indexed, `forWindow` walks back over every
+  earlier programme that can still overlap the window instead of only one, and
+  playlists of up to 80 channels build all rows instead of relying on a
+  viewport measurement. Tiny programme slivers keep a minimum painted width,
+  and text starts at 26 px instead of 44 px with clipping rather than a
+  misleading ellipsis. This is what made channels 2 and 42 appear to have no
+  EPG while the per-channel schedule and the channels list showed programmes.
+- The Linux build dependencies now include `libxi-dev` and `libx11-dev`, which
+  the window-management plugin's native build hook requires.
+
+## [0.1.0] - 2026-11-05
 
 ### Added
 
@@ -163,4 +209,5 @@ All notable changes to Mojac are documented here. The format follows
   accent, without text or artwork, so the whole row visibly has coverage while
   still avoiding one artwork request per sliver.
 
+[0.1.1]: https://github.com/mmbesar/Mojac/releases/tag/v0.1.1
 [0.1.0]: https://github.com/mmbesar/Mojac/releases/tag/v0.1.0

@@ -71,7 +71,10 @@ if [[ ! -x "$BUNDLE/mojac" ]]; then
 fi
 
 if [[ -z "$VERSION" ]]; then
-  VERSION="$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' "$ROOT/pubspec.yaml" | head -n1)"
+  VERSION="$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' "$ROOT/pubspec.yaml")"
+  # Take the first match without piping into `head`: with `pipefail`, an early
+  # reader exit makes the writer fail with EPIPE and aborts the script.
+  VERSION="${VERSION%%$'\n'*}"
 fi
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "Invalid version: $VERSION" >&2
@@ -139,7 +142,10 @@ bundle_runtime_libraries() {
     fi
   done
   if [[ -z "$mpv" ]] && command -v ldconfig >/dev/null 2>&1; then
-    mpv="$(ldconfig -p 2>/dev/null | awk '/libmpv\.so\.2 /{print $NF; exit}')"
+    # Keep reading after the first match: exiting early sends SIGPIPE to
+    # ldconfig, and `pipefail` then fails the script.
+    mpv="$(ldconfig -p 2>/dev/null |
+      awk '/libmpv\.so\.2 / && !found { print $NF; found = 1 }')"
   fi
   if [[ -z "$mpv" ]]; then
     for candidate in /usr/lib/*/libmpv.so.2 /usr/lib/libmpv.so.2 \
@@ -197,10 +203,14 @@ bundle_runtime_libraries() {
         if [[ -z "$needed_lib" ]]; then
           continue
         fi
-        resolved="$(printf '%s\n' "$ldd_output" | awk -v n="$needed_lib" '
-          $1 == n && $2 == "=>" { print $3; exit }
-          $1 == n && $2 != "=>" { print $1; exit }
-        ')"
+        # Feed awk from a here-string and let it read to EOF. Piping printf
+        # into an awk that `exit`s after the first match races with `pipefail`:
+        # the writer can still be flushing when the reader closes, which fails
+        # the script with "printf: write error: Broken pipe".
+        resolved="$(awk -v n="$needed_lib" '
+          $1 == n && $2 == "=>" && !found { print $3; found = 1 }
+          $1 == n && $2 != "=>" && !found { print $1; found = 1 }
+        ' <<< "$ldd_output")"
         if [[ -z "$resolved" || ! -e "$resolved" ]]; then
           continue
         fi
@@ -230,8 +240,7 @@ bundle_runtime_libraries() {
           copied=$((copied + 1))
         fi
         queue+=("$libdir/$name")
-      done < <(printf '%s\n' "$ldd_output" |
-        awk '/=> \//{print $3} /^\//{print $1}')
+      done < <(awk '/=> \//{print $3} /^\//{print $1}' <<< "$ldd_output")
     fi
   done
 

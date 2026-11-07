@@ -52,6 +52,11 @@ All notable changes to Mojac are documented here. The format follows
   are installed in the Analyze and test job: `flutter test` runs native-asset
   hooks, so without the GTK/X11/Xi headers the test job failed before running
   a single test.
+- Linux packaging no longer dies with `printf: write error: Broken pipe`. The
+  runtime-library walk piped `printf` into an `awk` that exited after the first
+  match; when the write had to wait on the pipe, `awk` closing it became a
+  SIGPIPE on `printf`, and `pipefail` turned that into a failed build. `awk`
+  now reads to EOF and keeps only the first match.
 
 ## [0.1.0] - 2026-11-05
 

@@ -126,7 +126,8 @@ jobs:
 
       - name: Rename APK for release
         run: |
-          version="$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' pubspec.yaml | head -n1)"
+          version="$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' pubspec.yaml)"
+          version="${version%%$'\n'*}"
           mv build/app/outputs/flutter-apk/app-release.apk \
             "build/app/outputs/flutter-apk/Mojac-${version}-arm64-v8a.apk"
 

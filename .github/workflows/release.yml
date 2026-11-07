@@ -1,0 +1,118 @@
+name: Release
+
+# Publish the artifacts that the Build workflow already produced for this
+# commit. Nothing is compiled here: a tag push is just a pointer at a build
+# that must have succeeded on main first.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to publish, for example v0.1.1
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag and commit
+        id: meta
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          tag="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          case "$tag" in
+            v[0-9]*) ;;
+            *)
+              echo "::error::tag must look like vX.Y.Z, got '$tag'"
+              exit 1
+              ;;
+          esac
+          version="${tag#v}"
+          pubspec_version="$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' pubspec.yaml)"
+          if [[ -n "$pubspec_version" && "$pubspec_version" != "$version" ]]; then
+            echo "::error::tag $tag does not match pubspec version $pubspec_version"
+            exit 1
+          fi
+          commit="$(git rev-list -n 1 "refs/tags/$tag" 2>/dev/null || true)"
+          if [[ -z "$commit" ]]; then
+            echo "::error::tag $tag does not exist in this checkout"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "Publishing $tag from $commit"
+
+      - name: Download the artifacts built for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.meta.outputs.commit }}
+        run: |
+          run_id="$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow build.yml \
+            --commit "$COMMIT" \
+            --status success \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId')"
+          if [[ -z "$run_id" ]]; then
+            echo "::error::No successful Build run for $COMMIT. Push the commit to main and let CI finish first."
+            exit 1
+          fi
+          echo "Using build run $run_id"
+          mkdir -p release
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --dir release
+
+          # One subdirectory per artifact; flatten so the release has a flat
+          # asset list like the build job's uploads.
+          dupes="$(find release -mindepth 2 -type f -printf '%f\n' | sort | uniq -d)"
+          if [[ -n "$dupes" ]]; then
+            echo "::error::artifact filenames collide: $dupes"
+            exit 1
+          fi
+          find release -mindepth 2 -type f -exec mv -t release {} +
+          find release -mindepth 1 -type d -empty -delete
+
+          if [[ -z "$(find release -maxdepth 1 -name '*.apk' -print -quit)" ]]; then
+            echo "::error::the build run has no APK artifact"
+            exit 1
+          fi
+          if [[ -z "$(find release -maxdepth 1 -name 'Mojac-*.AppImage' -print -quit)" ]]; then
+            echo "::error::the build run has no AppImage artifact"
+            exit 1
+          fi
+          ls -l release
+
+      - name: Write checksums
+        run: |
+          cd release
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%P\n' \
+            | sort | xargs -r sha256sum > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: Mojac ${{ steps.meta.outputs.version }}
+          files: release/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true

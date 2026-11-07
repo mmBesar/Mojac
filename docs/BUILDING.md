@@ -168,8 +168,9 @@ FUSE.
 
 ## Continuous integration
 
-`.github/workflows/build.yml` runs on pushes to `main`, pull requests, tags
-matching `v*`, and manual dispatches.
+`.github/workflows/build.yml` runs on pushes to `main`, pull requests and
+manual dispatches. `.github/workflows/release.yml` runs on tags matching `v*`
+and manual dispatches with a tag input.
 
 | Job | Runner | Output |
 | --- | --- | --- |
@@ -177,7 +178,7 @@ matching `v*`, and manual dispatches.
 | `android` | `ubuntu-24.04` | ARM64 release APK artifact |
 | `linux-amd64` | `ubuntu-24.04` | DEB, RPM, AppImage |
 | `linux-arm64` | `ubuntu-24.04-arm` | DEB, RPM, AppImage |
-| `release` | `ubuntu-24.04` | GitHub release + `SHA256SUMS` on tags |
+| `publish` (`release.yml`) | `ubuntu-24.04` | GitHub release + `SHA256SUMS` from the tagged commit's build |
 
 The ARM64 runner is free only for **public** repositories. The workflow checks
 `github.event.repository.private` and skips the ARM64 leg on private
@@ -194,16 +195,21 @@ To cut a release:
    `linux-amd64` and `linux-arm64` jobs to pass.
 4. Tag the green commit and push only the tag:
    `git tag -a v0.1.1 -m "Mojac 0.1.1" && git push origin v0.1.1`.
-   The tag push runs the whole workflow again; the `release` job then
-   publishes the DEB, RPM, AppImage and ARM64 APK plus `SHA256SUMS` on the
-   GitHub release.
+   This does **not** rebuild anything. `release.yml` finds the successful
+   `build.yml` run for that commit, downloads its APK/DEB/RPM/AppImage
+   artifacts, writes `SHA256SUMS` and publishes them on the GitHub release.
+   The published binaries are the ones CI already built and you can download
+   from the run page.
 5. Download one artifact per platform, check `SHA256SUMS`, and smoke-test the
    AppImage (`timeout 30 appimage-run ./Mojac-0.1.1-x86_64.AppImage`) and the
    APK (`adb install -r Mojac-0.1.1-arm64-v8a.apk`) before announcing it.
 
-Deleting and re-pushing a tag reruns the release job, which is handy for a
-failed artifact upload, but do not move a tag once the release has been
-announced. Bump the patch version instead.
+If the tag run fails after an artifact upload, re-run it from the Actions tab
+(`Release` → *Run workflow* → enter the tag). Deleting and re-pushing the tag
+works too. The release job refuses to run when the tagged commit has no green
+`build.yml` run, when the tag does not match the `pubspec.yaml` version, or
+when the artifacts include no APK/AppImage. Do not move a tag once the release
+has been announced; bump the patch version instead.
 
 ### Signing the Android APK
 

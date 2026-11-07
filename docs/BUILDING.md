@@ -35,7 +35,10 @@ sudo apt-get install --yes --no-install-recommends \
 ```
 
 `libxi-dev` and `libx11-dev` are needed by the window-management plugin that
-gives the built-in player real desktop fullscreen.
+gives the built-in player real desktop fullscreen. `cnativeapi` (its
+transitive native-assets dependency) runs `pkg-config gtk+-3.0 x11 xi` at
+build time, so `flutter test` needs those headers too, not just
+`flutter build linux`.
 
 `libmpv-dev` is only needed to compile/link against libmpv; the resulting
 application loads libmpv at runtime, so end users need `libmpv2`/`libmpv1`

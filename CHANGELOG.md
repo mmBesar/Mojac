@@ -48,7 +48,10 @@ All notable changes to Mojac are documented here. The format follows
   misleading ellipsis. This is what made channels 2 and 42 appear to have no
   EPG while the per-channel schedule and the channels list showed programmes.
 - The Linux build dependencies now include `libxi-dev` and `libx11-dev`, which
-  the window-management plugin's native build hook requires.
+  the window-management plugin's native build hook requires. The same packages
+  are installed in the Analyze and test job: `flutter test` runs native-asset
+  hooks, so without the GTK/X11/Xi headers the test job failed before running
+  a single test.
 
 ## [0.1.0] - 2026-11-05
 
